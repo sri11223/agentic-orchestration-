@@ -1,0 +1,308 @@
+{
+  "info": {
+    "name": "Agentic Orchestration API Tests",
+    "description": "Complete test suite for the workflow orchestration platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"testpass123\",\n  \"name\": \"Test User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type", 
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"testpass123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "item": [
+        {
+          "name": "Create Simple Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw", 
+              "raw": "{\n  \"name\": \"Simple Test Workflow\",\n  \"description\": \"A basic workflow for testing\",\n  \"nodes\": [\n    {\n      \"id\": \"trigger-1\",\n      \"type\": \"trigger\",\n      \"data\": {\n        \"triggerType\": \"manual\"\n      },\n      \"position\": { \"x\": 100, \"y\": 100 }\n    },\n    {\n      \"id\": \"log-1\",\n      \"type\": \"action\", \n      \"data\": {\n        \"actionType\": \"log\",\n        \"config\": {\n          \"message\": \"Hello from workflow! Trigger data: {{testMode}}\",\n          \"level\": \"info\"\n        }\n      },\n      \"position\": { \"x\": 300, \"y\": 100 }\n    }\n  ],\n  \"edges\": [\n    {\n      \"id\": \"e1\",\n      \"source\": \"trigger-1\",\n      \"target\": \"log-1\",\n      \"type\": \"default\"\n    }\n  ],\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/workflows",
+              "host": ["{{base_url}}"],
+              "path": ["workflows"]
+            }
+          }
+        },
+        {
+          "name": "Get All Workflows",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/workflows",
+              "host": ["{{base_url}}"],
+              "path": ["workflows"]
+            }
+          }
+        },
+        {
+          "name": "Create Integration Test Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization", 
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Integration Test Workflow\",\n  \"description\": \"Tests HTTP + Email + Database nodes\",\n  \"nodes\": [\n    {\n      \"id\": \"trigger-1\",\n      \"type\": \"trigger\",\n      \"data\": {\n        \"triggerType\": \"manual\"\n      },\n      \"position\": { \"x\": 100, \"y\": 100 }\n    },\n    {\n      \"id\": \"http-1\",\n      \"type\": \"action\",\n      \"data\": {\n        \"actionType\": \"http_request\",\n        \"config\": {\n          \"url\": \"https://jsonplaceholder.typicode.com/posts/1\",\n          \"method\": \"GET\"\n        }\n      },\n      \"position\": { \"x\": 300, \"y\": 100 }\n    },\n    {\n      \"id\": \"email-1\",\n      \"type\": \"action\",\n      \"data\": {\n        \"actionType\": \"email\",\n        \"config\": {\n          \"to\": \"test@example.com\",\n          \"subject\": \"Workflow Test Result\",\n          \"body\": \"HTTP call succeeded! Post title: {{httpResponse.title}}\"\n        }\n      },\n      \"position\": { \"x\": 500, \"y\": 100 }\n    },\n    {\n      \"id\": \"db-1\", \n      \"type\": \"action\",\n      \"data\": {\n        \"actionType\": \"database\",\n        \"config\": {\n          \"operation\": \"insert\",\n          \"table\": \"executions\",\n          \"data\": {\n            \"result\": \"success\",\n            \"postTitle\": \"{{httpResponse.title}}\",\n            \"timestamp\": \"{{new Date().toISOString()}}\"\n          }\n        }\n      },\n      \"position\": { \"x\": 700, \"y\": 100 }\n    }\n  ],\n  \"edges\": [\n    {\n      \"id\": \"e1\",\n      \"source\": \"trigger-1\",\n      \"target\": \"http-1\", \n      \"type\": \"default\"\n    },\n    {\n      \"id\": \"e2\",\n      \"source\": \"http-1\",\n      \"target\": \"email-1\",\n      \"type\": \"default\"\n    },\n    {\n      \"id\": \"e3\",\n      \"source\": \"email-1\",\n      \"target\": \"db-1\",\n      \"type\": \"default\"\n    }\n  ],\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/workflows",
+              "host": ["{{base_url}}"],
+              "path": ["workflows"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Executions",
+      "item": [
+        {
+          "name": "Start Simple Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workflowId\": \"{{workflow_id}}\",\n  \"triggerData\": {\n    \"testMode\": true,\n    \"message\": \"Started from Postman\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/executions/start",
+              "host": ["{{base_url}}"],
+              "path": ["executions", "start"]
+            }
+          }
+        },
+        {
+          "name": "Get Execution Status",
+          "request": {
+            "method": "GET", 
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/executions/{{execution_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["executions", "{{execution_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Execution History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization", 
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/executions/{{execution_id}}/history",
+              "host": ["{{base_url}}"],
+              "path": ["executions", "{{execution_id}}", "history"]
+            }
+          }
+        },
+        {
+          "name": "Get All Executions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/executions", 
+              "host": ["{{base_url}}"],
+              "path": ["executions"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Nodes",
+      "item": [
+        {
+          "name": "Create AI Workflow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"AI Processing Workflow\",\n  \"description\": \"Tests AI node with Gemini\",\n  \"nodes\": [\n    {\n      \"id\": \"trigger-1\",\n      \"type\": \"trigger\",\n      \"data\": {\n        \"triggerType\": \"manual\"\n      },\n      \"position\": { \"x\": 100, \"y\": 100 }\n    },\n    {\n      \"id\": \"ai-1\",\n      \"type\": \"ai_processor\",\n      \"data\": {\n        \"aiProvider\": \"gemini\",\n        \"model\": \"gemini-1.5-flash\",\n        \"prompt\": \"Analyze this user input and extract the sentiment: {{userMessage}}\",\n        \"temperature\": 0.7,\n        \"parseJson\": true\n      },\n      \"position\": { \"x\": 300, \"y\": 100 }\n    },\n    {\n      \"id\": \"log-1\",\n      \"type\": \"action\",\n      \"data\": {\n        \"actionType\": \"log\",\n        \"config\": {\n          \"message\": \"AI Response: {{aiResponse}}\",\n          \"level\": \"info\"\n        }\n      },\n      \"position\": { \"x\": 500, \"y\": 100 }\n    }\n  ],\n  \"edges\": [\n    {\n      \"id\": \"e1\",\n      \"source\": \"trigger-1\",\n      \"target\": \"ai-1\",\n      \"type\": \"default\"\n    },\n    {\n      \"id\": \"e2\",\n      \"source\": \"ai-1\",\n      \"target\": \"log-1\",\n      \"type\": \"default\"\n    }\n  ],\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/workflows",
+              "host": ["{{base_url}}"],
+              "path": ["workflows"]
+            }
+          }
+        },
+        {
+          "name": "Start AI Workflow",
+          "request": {
+            "method": "POST", 
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workflowId\": \"{{ai_workflow_id}}\",\n  \"triggerData\": {\n    \"userMessage\": \"I love this product! It's amazing and works perfectly.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/executions/start",
+              "host": ["{{base_url}}"],
+              "path": ["executions", "start"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token", 
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "workflow_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "execution_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ai_workflow_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
