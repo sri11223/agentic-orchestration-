@@ -102,16 +102,16 @@ router.post('/register',
         tokens
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('=== REGISTRATION ERROR DEBUG ===');
-      console.error('Error name:', error.name);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
+      console.error('Error name:', error?.name);
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
       console.error('Full error:', error);
       console.error('================================');
       
       // Handle specific MongoDB errors
-      if (error.name === 'ValidationError') {
+      if (error?.name === 'ValidationError') {
         return res.status(400).json({
           error: 'Validation Error',
           message: error.message,
@@ -122,7 +122,7 @@ router.post('/register',
         });
       }
       
-      if (error.code === 11000) {
+      if (error?.code === 11000) {
         return res.status(409).json({
           error: 'Duplicate Error',
           message: 'User already exists',
@@ -137,7 +137,7 @@ router.post('/register',
       res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to register user',
-        details: error.message
+        details: error?.message || 'Unknown error'
       });
     }
   }
@@ -203,7 +203,7 @@ router.post('/login',
         tokens
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
       res.status(500).json({
         error: 'Internal server error',
@@ -255,7 +255,7 @@ router.post('/refresh',
         tokens
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Token refresh error:', error);
       res.status(500).json({
         error: 'Internal server error',
@@ -300,7 +300,7 @@ router.post('/logout',
         message: 'Logout successful'
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Logout error:', error);
       res.status(500).json({
         error: 'Internal server error',

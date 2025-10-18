@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { UserModel } from '../models/user.model';
+import { UserModel, IUser, IApiKey } from '../models/user.model';
 import { authService } from '../services/auth.service';
 
 // Extend Request interface to include user
@@ -102,7 +102,7 @@ export const authenticateApiKey = async (req: Request, res: Response, next: Next
     }
 
     // Update last used timestamp
-    const apiKeyEntry = user.apiKeys.find(key => key.key === apiKey);
+    const apiKeyEntry = user.apiKeys?.find((key: IApiKey) => key.key === apiKey);
     if (apiKeyEntry) {
       apiKeyEntry.lastUsed = new Date();
       await user.save();

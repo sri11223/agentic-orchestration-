@@ -1,6 +1,14 @@
 import mongoose, { Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+export interface IApiKey {
+  key: string;
+  name: string;
+  isActive: boolean;
+  lastUsed?: Date;
+  createdAt: Date;
+}
+
 export interface IUser extends Document {
   username: string;
   email: string;
@@ -11,6 +19,7 @@ export interface IUser extends Document {
   isActive: boolean;
   lastLogin?: Date;
   refreshTokens: string[];
+  apiKeys: IApiKey[];
   preferences: {
     theme: 'light' | 'dark';
     notifications: {
@@ -21,11 +30,10 @@ export interface IUser extends Document {
     };
     timezone: string;
   };
-  // Temporarily removed apiKeys field
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
-  // generateApiKey method temporarily removed
+  generateApiKey(name: string): Promise<string>;
 }
 
 const userSchema = new mongoose.Schema<IUser>({
@@ -72,6 +80,13 @@ const userSchema = new mongoose.Schema<IUser>({
   refreshTokens: [{
     type: String
   }],
+  apiKeys: [{
+    key: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    isActive: { type: Boolean, default: true },
+    lastUsed: Date,
+    createdAt: { type: Date, default: Date.now }
+  }],
   preferences: {
     theme: {
       type: String,
@@ -89,7 +104,6 @@ const userSchema = new mongoose.Schema<IUser>({
       default: 'UTC'
     }
   }
-  // Temporarily removed apiKeys field to fix duplicate key issue
 }, {
   timestamps: true
 });
@@ -97,7 +111,7 @@ const userSchema = new mongoose.Schema<IUser>({
 // Indexes for performance
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
-// Removed apiKeys index - will add when needed
+userSchema.index({ 'apiKeys.key': 1 });
 userSchema.index({ role: 1, isActive: 1 });
 
 // Hash password before saving
@@ -118,7 +132,21 @@ userSchema.methods.comparePassword = async function(candidatePassword: string): 
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Temporarily removed generateApiKey method
+// Generate API key method
+userSchema.methods.generateApiKey = async function(name: string): Promise<string> {
+  const crypto = await import('crypto');
+  const apiKey = crypto.randomBytes(32).toString('hex');
+  
+  this.apiKeys.push({
+    key: apiKey,
+    name: name,
+    isActive: true,
+    createdAt: new Date()
+  });
+  
+  await this.save();
+  return apiKey;
+};
 
 // Remove password from JSON output
 userSchema.methods.toJSON = function() {

@@ -13,6 +13,7 @@ import authRoutes from './routes/auth.routes';
 import workflowRoutes from './routes/workflow.routes';
 import executionRoutes from './routes/execution.routes';
 import executionControlRoutes from './routes/execution-control.routes';
+import dashboardRoutes from './routes/dashboard.routes';
 
 // Import middleware
 import { rateLimit } from './middleware/rate-limit';
@@ -76,6 +77,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/executions', executionRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', executionControlRoutes);
 
 // 404 handler - catch all unmatched routes

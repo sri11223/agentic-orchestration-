@@ -19,7 +19,12 @@ export enum NodeType {
   DECISION = 'decision',
   ACTION = 'action',
   TIMER = 'timer',
-  TRIGGER = 'trigger'
+  TRIGGER = 'trigger',
+  FILE_OPERATIONS = 'file_operations',
+  FORM_BUILDER = 'form_builder', 
+  DATA_TRANSFORM = 'data_transform',
+  PUSH_NOTIFICATION = 'push_notification',
+  EMAIL_AUTOMATION = 'email_automation'
 }
 
 export interface IWorkflowExecution {
