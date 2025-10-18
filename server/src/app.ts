@@ -14,14 +14,24 @@ import workflowRoutes from './routes/workflow.routes';
 import executionRoutes from './routes/execution.routes';
 import executionControlRoutes from './routes/execution-control.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import monitoringRoutes from './routes/monitoring.routes';
+import adminRoutes from './routes/admin.routes';
+import webhookRoutes from './routes/webhook.routes';
 
 // Import middleware
 import { rateLimit } from './middleware/rate-limit';
+import { performanceMiddleware } from './services/performance-monitor.service';
+import { securityOptimizationService } from './services/security-optimization.service';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Security middleware
+// Advanced security middleware stack
+const securityMiddleware = securityOptimizationService.getSecurityMiddleware();
+securityMiddleware.forEach(middleware => app.use(middleware));
+
+// Legacy security middleware (remove if conflicts)
+/*
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -37,31 +47,41 @@ app.use(helmet({
     preload: true
   }
 }));
+*/
 
-// CORS configuration
+// CORS configuration (remove if conflicts)
+/*
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
   optionsSuccessStatus: 200
 }));
+*/
 
 // Request parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Compression middleware
+// Performance monitoring middleware
+app.use(performanceMiddleware());
+
+// Compression middleware (remove if conflicts)
+/*
 app.use(compression());
+*/
 
 // Logging middleware
 app.use(morgan('combined'));
 
-// Global rate limiting
+// Global rate limiting (remove if conflicts)
+/*
 const globalRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // 1000 requests per window
   keyPrefix: 'global:'
 });
 app.use(globalRateLimit);
+*/
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -78,6 +98,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/executions', executionRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/monitoring', monitoringRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/webhooks', webhookRoutes);
 app.use('/api', executionControlRoutes);
 
 // 404 handler - catch all unmatched routes
@@ -172,28 +195,5 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
-
-// Start server
-async function startServer() {
-  try {
-    // Connect to database
-    await connectDatabase();
-    console.log('Database connected successfully');
-
-    // Start HTTP server
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`Health check: http://localhost:${PORT}/health`);
-    });
-
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-// Start the application
-startServer();
 
 export default app;
