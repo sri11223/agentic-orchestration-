@@ -334,8 +334,14 @@ const FeaturesPage = () => {
             </p>
           </motion.div>
 
-          {/* Clean Feature Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+          {/* Interactive Workflow Canvas */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8 }}
+            viewport={{ once: true }}
+            className="relative bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-slate-700/50 overflow-hidden mb-16"
+          >
             {/* Premium Glass Morphism Background */}
             <div className="absolute inset-0">
               {/* Sophisticated gradient overlay */}
