@@ -49,14 +49,12 @@ app.use(helmet({
 }));
 */
 
-// CORS configuration (remove if conflicts)
-/*
+// CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:8080',
   credentials: true,
   optionsSuccessStatus: 200
 }));
-*/
 
 // Request parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -91,6 +89,13 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Debug middleware - log all incoming requests
+app.use((req, res, next) => {
+  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log('🔍 Headers:', req.headers);
+  next();
 });
 
 // API routes
@@ -195,5 +200,25 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
+
+// Start the server
+const startServer = async () => {
+  try {
+    await connectDatabase();
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📍 Environment: ${process.env.NODE_ENV}`);
+      console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:8080'}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Only start server if this file is run directly
+if (require.main === module) {
+  startServer();
+}
 
 export default app;

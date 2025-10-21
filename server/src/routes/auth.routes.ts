@@ -43,10 +43,17 @@ router.post('/register',
       .withMessage('Last name is required')
   ],
   async (req: Request, res: Response) => {
+    console.log('🎯 Backend: Registration endpoint hit!');
+    console.log('📨 Request method:', req.method);
+    console.log('📨 Request URL:', req.url);
+    console.log('📨 Request headers:', req.headers);
+    console.log('📨 Request body:', req.body);
+    
     try {
       // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log('❌ Validation errors:', errors.array());
         return res.status(400).json({
           error: 'Validation failed',
           details: errors.array()

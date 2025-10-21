@@ -45,12 +45,16 @@ router.get('/',
       // Build query
       const query: any = {};
       
+      // Get consistent user ID
+      const userId = req.user?.userId || req.user?._id || req.user?.id;
+      console.log('GET workflows - Using userId:', userId);
+      
       // Filter by user permissions
       if (req.user.role !== 'admin') {
         query.$or = [
-          { 'permissions.owners': req.user._id },
-          { 'permissions.editors': req.user._id },
-          { 'permissions.viewers': req.user._id }
+          { 'permissions.owners': userId },
+          { 'permissions.editors': userId },
+          { 'permissions.viewers': userId }
         ];
       }
 
@@ -66,13 +70,16 @@ router.get('/',
         query.$text = { $search: req.query.search };
       }
 
-      // Check cache first
-      const cacheKey = `workflows:${JSON.stringify(query)}:${page}:${limit}`;
-      const cachedResult = await cacheService.get(cacheKey);
+      console.log('Query being executed:', JSON.stringify(query, null, 2));
+
+      // Check cache first (temporarily disabled for debugging)
+      // const cacheKey = `workflows:${JSON.stringify(query)}:${page}:${limit}`;
+      // const cachedResult = await cacheService.get(cacheKey);
       
-      if (cachedResult) {
-        return res.json(cachedResult);
-      }
+      // if (cachedResult) {
+      //   console.log('Returning cached result:', cachedResult);
+      //   return res.json(cachedResult);
+      // }
 
       // Fetch from database
       const [workflows, total] = await Promise.all([
@@ -85,6 +92,11 @@ router.get('/',
         WorkflowModel.countDocuments(query)
       ]);
 
+      console.log('Database query results:');
+      console.log('- Total found:', total);
+      console.log('- Workflows returned:', workflows.length);
+      console.log('- Workflows:', workflows.map(w => ({ id: w._id, name: w.name, owners: w.permissions.owners })));
+
       const result = {
         workflows,
         pagination: {
@@ -95,9 +107,10 @@ router.get('/',
         }
       };
 
-      // Cache result for 5 minutes
-      await cacheService.set(cacheKey, result, 300);
+      // Cache result for 5 minutes (temporarily disabled for debugging)
+      // await cacheService.set(cacheKey, result, 300);
 
+      console.log('Sending result:', result);
       res.json(result);
 
     } catch (error) {

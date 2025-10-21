@@ -17,9 +17,11 @@ import {
   ArrowLeft,
   CheckCircle,
   Sparkles,
-  Building
+  Building,
+  AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { authService, type RegisterRequest, type ApiError } from '@/services/auth.service';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -27,24 +29,40 @@ const RegisterPage = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    username: '',
     email: '',
-    company: '',
     password: ''
   });
   const [isLoading, setIsLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState<string>('');
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreed) return;
     
     setIsLoading(true);
+    setError('');
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const registerData: RegisterRequest = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password
+      };
+      
+      await authService.register(registerData);
+      
+      // Navigate to dashboard on successful registration
       navigate('/dashboard');
-    }, 2000);
+    } catch (err: any) {
+      const apiError = err as ApiError;
+      setError(apiError.message || apiError.error || 'Registration failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const updateFormData = (field: string, value: string) => {
@@ -257,18 +275,19 @@ const RegisterPage = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="company" className="text-gray-700 dark:text-gray-300">
-                Company <span className="text-gray-400">(Optional)</span>
+              <Label htmlFor="username" className="text-gray-700 dark:text-gray-300">
+                Username
               </Label>
               <div className="relative">
-                <Building className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <User className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <Input
-                  id="company"
+                  id="username"
                   type="text"
-                  placeholder="Acme Inc."
+                  placeholder="johndoe"
                   className="pl-10 h-12 border-gray-300 focus:border-emerald-500"
-                  value={formData.company}
-                  onChange={(e) => updateFormData('company', e.target.value)}
+                  value={formData.username}
+                  onChange={(e) => updateFormData('username', e.target.value)}
+                  required
                 />
               </div>
             </div>
@@ -335,6 +354,20 @@ const RegisterPage = () => {
                 </button>
               </label>
             </div>
+
+            {/* Error Display */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-red-50 border border-red-200 rounded-lg"
+              >
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              </motion.div>
+            )}
 
             <Button
               type="submit"

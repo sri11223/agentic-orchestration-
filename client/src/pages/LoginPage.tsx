@@ -16,9 +16,11 @@ import {
   Chrome,
   ArrowLeft,
   CheckCircle,
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { authService, type LoginRequest, type ApiError } from '@/services/auth.service';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -26,16 +28,25 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const loginData: LoginRequest = { email, password };
+      await authService.login(loginData);
+      
+      // Navigate to dashboard on successful login
       navigate('/dashboard');
-    }, 2000);
+    } catch (err: any) {
+      const apiError = err as ApiError;
+      setError(apiError.message || apiError.error || 'Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const benefits = [

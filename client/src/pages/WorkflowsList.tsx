@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DashboardLayout } from '@/components/DashboardLayout';
 import { Plus, Play, Copy, Trash2, Edit } from 'lucide-react';
 import { demoWorkflow } from '@/data/demoWorkflow';
 
@@ -47,30 +48,16 @@ const WorkflowsList = () => {
     }
   };
   
+  // Get user info for welcome message
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : { username: 'User' };
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-lg">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold bg-ai-gradient bg-clip-text text-transparent">
-                Workflow Builder
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Build intelligent workflow automations
-              </p>
-            </div>
-            <Button onClick={handleCreateNew} size="lg">
-              <Plus className="w-5 h-5 mr-2" />
-              Create Workflow
-            </Button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+    <DashboardLayout
+      title={`👋 Welcome ${user.username}!`}
+      subtitle="Create your first workflow"
+    >
+      <div className="p-6">
         {workflows.length === 0 ? (
           <div className="text-center py-20">
             <div className="text-6xl mb-4">🚀</div>
@@ -165,7 +152,7 @@ const WorkflowsList = () => {
           </div>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 };
 

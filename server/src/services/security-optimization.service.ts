@@ -374,7 +374,11 @@ export class SecurityOptimizationService {
         req.body = sanitizeObject(req.body);
       }
       if (req.query) {
-        req.query = sanitizeObject(req.query);
+        // Don't reassign req.query directly as it's read-only in newer Express versions
+        const sanitizedQuery = sanitizeObject(req.query);
+        // Clear existing query properties and set sanitized ones
+        Object.keys(req.query).forEach(key => delete req.query[key]);
+        Object.assign(req.query, sanitizedQuery);
       }
 
       next();
