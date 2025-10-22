@@ -9,6 +9,7 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AINodeConfig } from './AINodeConfig';
 import { workflowService } from '@/services/workflow.service';
+import { authService } from '@/services/auth.service';
 
 const NodeConfigPanel = () => {
   const { selectedNode, setSelectedNode, updateNodeData } = useWorkflowStore();
@@ -43,12 +44,14 @@ const NodeConfigPanel = () => {
   
   const handleAITest = async (config: any) => {
     try {
-      // Use the execution service to test AI configuration
+      // Use the auth service to get a valid token
+      const token = await authService.getValidToken();
+      
       const result = await fetch('http://localhost:5000/api/ai/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           prompt: config.prompt,

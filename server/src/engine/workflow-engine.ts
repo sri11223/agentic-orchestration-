@@ -47,7 +47,10 @@ export class WorkflowEngine extends EventEmitter {
     }
 
     if (workflow.status !== 'active') {
-      throw new Error(`Workflow ${workflowId} is not active`);
+      // Auto-activate workflow for execution (user-friendly approach)
+      console.log(`🔄 Auto-activating workflow ${workflowId} for execution`);
+      workflow.status = 'active';
+      await workflow.save();
     }
 
     // Create execution context

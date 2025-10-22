@@ -31,22 +31,27 @@ class WorkflowExecutionService {
   private baseUrl = 'http://localhost:5000/api';
 
   private async request(endpoint: string, options: RequestInit = {}) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
+    try {
+      const token = await authService.getValidToken();
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers,
+        },
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || error.message || 'Request failed');
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(error.error || error.message || 'Request failed');
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('❌ Execution service request failed:', error);
+      throw error;
     }
-
-    return response.json();
   }
 
   /**

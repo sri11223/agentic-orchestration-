@@ -4,7 +4,6 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -87,8 +86,8 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
     taskType: initialData?.taskType || 'auto',
     aiProvider: initialData?.aiProvider || '', // Empty = smart routing
     model: initialData?.model || '',
-    temperature: initialData?.temperature || [0.7],
-    maxTokens: initialData?.maxTokens || [1000],
+    temperature: initialData?.temperature || 0.7,
+    maxTokens: initialData?.maxTokens || 1000,
     parseJson: initialData?.parseJson || false,
     context: initialData?.context || '',
     ...initialData
@@ -103,8 +102,8 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
   const handleSave = () => {
     onSave({
       ...config,
-      temperature: config.temperature[0],
-      maxTokens: config.maxTokens[0]
+      temperature: config.temperature,
+      maxTokens: config.maxTokens
     });
   };
 
@@ -261,7 +260,7 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
               rows={4}
             />
             <p className="text-sm text-muted-foreground mt-1">
-              Use variables like {{user_input}}, {{previous_output}} to make prompts dynamic
+              Use variables like {`{{user_input}}, {{previous_output}}`} to make prompts dynamic
             </p>
           </div>
 
@@ -284,12 +283,13 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Temperature: {config.temperature[0]}</Label>
-            <Slider
+            <Label>Temperature: {config.temperature}</Label>
+            <Input
+              type="number"
               value={config.temperature}
-              onValueChange={(value) => setConfig({...config, temperature: value})}
-              max={2}
+              onChange={(e) => setConfig({...config, temperature: parseFloat(e.target.value) || 0.7})}
               min={0}
+              max={2}
               step={0.1}
               className="mt-2"
             />
@@ -299,12 +299,13 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
           </div>
 
           <div>
-            <Label>Max Tokens: {config.maxTokens[0]}</Label>
-            <Slider
+            <Label>Max Tokens: {config.maxTokens}</Label>
+            <Input
+              type="number"
               value={config.maxTokens}
-              onValueChange={(value) => setConfig({...config, maxTokens: value})}
-              max={4000}
+              onChange={(e) => setConfig({...config, maxTokens: parseInt(e.target.value) || 1000})}
               min={100}
+              max={4000}
               step={100}
               className="mt-2"
             />
