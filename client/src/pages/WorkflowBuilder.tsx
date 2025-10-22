@@ -6,6 +6,11 @@ import {
   MiniMap,
   ReactFlowProvider,
   Node,
+  Edge,
+  NodeChange,
+  EdgeChange,
+  Connection,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useWorkflowStore, NodeData } from '@/store/workflowStore';
@@ -18,6 +23,38 @@ import { ExecutionPanel } from '@/components/workflow/ExecutionPanel';
 import { useParams } from 'react-router-dom';
 import { demoWorkflow } from '@/data/demoWorkflow';
 import { workflowService } from '@/services/workflow.service';
+import { useAutoSave } from '@/hooks/useAutoSave';
+
+// Map backend node types to frontend node types
+const mapBackendToFrontendNodeType = (backendType: string): string => {
+  const mapping: Record<string, string> = {
+    // Triggers
+    'trigger': 'manual-trigger',
+    'timer': 'schedule-trigger',
+    
+    // AI Agents  
+    'ai_processor': 'ai-text-generator',
+    
+    // Actions
+    'action': 'http-request',
+    'email_automation': 'send-email',
+    
+    // Logic
+    'decision': 'condition',
+    
+    // Human
+    'human_task': 'approval-request',
+    'form_builder': 'form-input',
+    
+    // Others
+    'file_operations': 'http-request',
+    'data_transform': 'http-request',
+    'push_notification': 'slack-message'
+  };
+  
+  return mapping[backendType] || 'manual-trigger';
+};
+import { Badge } from '@/components/ui/badge';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -27,6 +64,7 @@ const WorkflowBuilderContent = () => {
   const { id } = useParams();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
+  const reactFlowInstance = useReactFlow();
   
   const {
     currentWorkflow,
@@ -36,7 +74,12 @@ const WorkflowBuilderContent = () => {
     onConnect,
     addNode,
     setSelectedNode,
+    deleteNode,
+    deleteSelectedNodes,
   } = useWorkflowStore();
+
+  // Auto-save functionality
+  const { debouncedSave, saveNow, isSaving, hasUnsavedChanges, saveStatus, lastSaved } = useAutoSave(id);
   
   useEffect(() => {
     const loadWorkflow = async () => {
@@ -68,9 +111,44 @@ const WorkflowBuilderContent = () => {
           const workflow = await workflowService.getWorkflow(id);
           
           // Convert backend workflow to store format
+          console.log('🔄 Converting backend workflow to frontend format:', workflow);
+          
           const storeWorkflow = {
             ...workflow,
             id: workflow.id || id!, // Ensure ID is present
+            // Convert backend nodes to frontend format
+            nodes: workflow.nodes?.map(node => {
+              console.log('📍 Loading node:', {
+                id: node.id,
+                backendType: node.type,
+                frontendType: mapBackendToFrontendNodeType(node.type),
+                position: node.position,
+                title: node.data?.title
+              });
+              
+              const frontendNodeType = mapBackendToFrontendNodeType(node.type);
+              const nodeTypeConfig = nodeTypesList.find(nt => nt.type === frontendNodeType);
+              
+              return {
+                id: node.id,
+                type: 'custom', // All nodes use 'custom' type in ReactFlow
+                position: node.position || { x: 100, y: 100 },
+                data: {
+                  label: node.data?.title || nodeTypeConfig?.label || 'Untitled Node',
+                  category: nodeTypeConfig?.category || 'trigger', // THIS WAS MISSING!
+                  config: {
+                    nodeType: frontendNodeType,
+                    description: node.data?.description || '',
+                    ...node.data?.config
+                  },
+                  ...node.data
+                }
+              };
+            }) || [],
+            edges: (() => {
+              console.log('🔗 Loading edges:', workflow.edges);
+              return workflow.edges || [];
+            })(),
             lastModified: new Date(workflow.metadata?.updatedAt || Date.now()),
             executionCount: 0 // TODO: Get from execution history
           };
@@ -88,7 +166,42 @@ const WorkflowBuilderContent = () => {
 
     loadWorkflow();
   }, [id]);
+
+  // Keyboard event handler for node deletion
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Delete or Backspace key
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        // Only delete if we're not in an input field
+        const target = event.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && !target.contentEditable) {
+          event.preventDefault();
+          deleteSelectedNodes();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [deleteSelectedNodes]);
   
+  // Enhanced handlers with auto-save
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    onNodesChange(changes as any);
+    debouncedSave(); // Auto-save after node changes
+  }, [onNodesChange, debouncedSave]);
+
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    onEdgesChange(changes);
+    debouncedSave(); // Auto-save after edge changes  
+  }, [onEdgesChange, debouncedSave]);
+
+  const handleConnect = useCallback((connection: Connection) => {
+    console.log('🔗 Creating connection:', connection);
+    onConnect(connection);
+    debouncedSave(); // Auto-save after connecting nodes
+  }, [onConnect, debouncedSave]);
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
@@ -100,15 +213,22 @@ const WorkflowBuilderContent = () => {
       
       if (!reactFlowWrapper.current) return;
       
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
       const nodeTypeData = JSON.parse(
         event.dataTransfer.getData('application/reactflow')
       );
       
-      const position = {
-        x: event.clientX - reactFlowBounds.left - 80,
-        y: event.clientY - reactFlowBounds.top - 40,
-      };
+      // Use ReactFlow's screenToFlowPosition for accurate coordinate conversion
+      // This handles zoom, pan, and coordinate transformation automatically
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      
+      console.log('🎯 Dropping node:', {
+        type: nodeTypeData.type,
+        clientPosition: { x: event.clientX, y: event.clientY },
+        flowPosition: position
+      });
       
       const newNode: Node<NodeData> = {
         id: `node-${Date.now()}`,
@@ -124,8 +244,9 @@ const WorkflowBuilderContent = () => {
       };
       
       addNode(newNode);
+      debouncedSave(); // Auto-save after adding node
     },
-    [addNode]
+    [addNode, debouncedSave, reactFlowInstance]
   );
   
   const onNodeClick = useCallback(
@@ -147,18 +268,39 @@ const WorkflowBuilderContent = () => {
   
   return (
     <div className="flex flex-col h-screen bg-background">
-      <WorkflowNavbar />
+      <WorkflowNavbar 
+        saveStatus={saveStatus}
+        lastSaved={lastSaved}
+        onSave={saveNow}
+      />
       
       <div className="flex-1 flex overflow-hidden">
         <NodePalette />
         
         <div className="flex-1 relative" ref={reactFlowWrapper}>
+          {/* Auto-save status indicator */}
+          <div className="absolute top-4 right-4 z-10">
+            {isSaving ? (
+              <Badge variant="secondary" className="animate-pulse">
+                💾 Saving...
+              </Badge>
+            ) : hasUnsavedChanges ? (
+              <Badge variant="outline" className="border-orange-500 text-orange-700">
+                ⏳ Unsaved changes
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-300">
+                ✅ Saved
+              </Badge>
+            )}
+          </div>
+
           <ReactFlow
             nodes={currentWorkflow.nodes}
             edges={currentWorkflow.edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={handleConnect}
             onDrop={onDrop}
             onDragOver={onDragOver}
             onNodeClick={onNodeClick}

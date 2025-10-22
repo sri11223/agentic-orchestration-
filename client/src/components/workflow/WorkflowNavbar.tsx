@@ -5,15 +5,26 @@ import { Save, Play, StopCircle, Settings, User } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { SaveStatusIndicator } from './SaveStatusIndicator';
 
-const WorkflowNavbar = () => {
+interface WorkflowNavbarProps {
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  lastSaved?: Date | null;
+  onSave?: () => void;
+}
+
+const WorkflowNavbar = ({ saveStatus = 'idle', lastSaved, onSave }: WorkflowNavbarProps) => {
   const { currentWorkflow, updateWorkflowName, saveWorkflow, executeWorkflow, executionStatus } = useWorkflowStore();
   const [isEditingName, setIsEditingName] = useState(false);
   const navigate = useNavigate();
   
   const handleSave = () => {
-    saveWorkflow();
-    toast.success('Workflow saved successfully');
+    if (onSave) {
+      onSave();
+    } else {
+      saveWorkflow();
+      toast.success('Workflow saved successfully');
+    }
   };
   
   const handleExecute = () => {
@@ -60,9 +71,7 @@ const WorkflowNavbar = () => {
           </button>
         )}
         
-        <span className="text-xs text-muted-foreground">
-          Last saved {currentWorkflow.lastModified.toLocaleTimeString()}
-        </span>
+        <SaveStatusIndicator status={saveStatus} lastSaved={lastSaved} />
       </div>
       
       {/* Center */}

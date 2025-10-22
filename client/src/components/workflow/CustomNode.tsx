@@ -1,17 +1,27 @@
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
-import { NodeData } from '@/store/workflowStore';
+import { NodeData, useWorkflowStore } from '@/store/workflowStore';
 import { nodeTypes } from '@/data/nodeTypes';
 import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
-const CustomNode = ({ data, selected }: NodeProps) => {
+const CustomNode = ({ data, selected, id }: NodeProps) => {
   const typedData = data as NodeData;
+  const { deleteNode, setSelectedNode } = useWorkflowStore();
+  const [isHovered, setIsHovered] = useState(false);
   const nodeConfig = nodeTypes.find(
     (nt) => nt.type === typedData.config?.nodeType
   );
   
   const Icon = nodeConfig?.icon;
   const category = typedData.category;
+
+  const handleClick = useCallback(() => {
+    if (id) {
+      setSelectedNode({ id, data: typedData } as any);
+    }
+  }, [id, typedData, setSelectedNode]);
   
   const getCategoryClass = () => {
     switch (category) {
@@ -47,11 +57,14 @@ const CustomNode = ({ data, selected }: NodeProps) => {
     <div
       className={cn(
         'relative px-4 py-3 rounded-lg border-2 backdrop-blur-sm transition-all',
-        'min-w-[160px] cursor-pointer',
+        'min-w-[160px] cursor-pointer group',
         getCategoryClass(),
         getStatusClass(),
         selected && 'ring-4 ring-primary/50 shadow-lg shadow-primary/20'
       )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleClick}
     >
       {/* Input handle - hide for trigger nodes */}
       {category !== 'trigger' && (
@@ -80,6 +93,21 @@ const CustomNode = ({ data, selected }: NodeProps) => {
         {Icon && <Icon className="w-6 h-6" />}
         <div className="text-sm font-medium text-center">{typedData.label}</div>
       </div>
+      
+      {/* Delete button - appears on hover */}
+      {isHovered && (
+        <Button
+          size="sm"
+          variant="destructive"
+          className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full opacity-90 hover:opacity-100 transition-opacity z-10"
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteNode(id);
+          }}
+        >
+          <X className="w-3 h-3" />
+        </Button>
+      )}
       
       {/* Output handle */}
       <Handle

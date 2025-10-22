@@ -40,6 +40,8 @@ interface WorkflowStore {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (node: Node<NodeData>) => void;
+  deleteNode: (nodeId: string) => void;
+  deleteSelectedNodes: () => void;
   
   // Workflow actions
   saveWorkflow: () => void;
@@ -106,7 +108,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const current = get().currentWorkflow;
     if (!current) return;
     
+    console.log('🏪 Store: Adding connection to edges:', connection);
+    console.log('🏪 Store: Current edges before:', current.edges.length);
+    
     const updatedEdges = addEdge(connection, current.edges);
+    
+    console.log('🏪 Store: Updated edges after:', updatedEdges.length);
+    
     set({
       currentWorkflow: { ...current, edges: updatedEdges, lastModified: new Date() }
     });
@@ -123,6 +131,42 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         lastModified: new Date()
       }
     });
+  },
+
+  deleteNode: (nodeId) => {
+    const current = get().currentWorkflow;
+    if (!current) return;
+
+    // Remove the node
+    const updatedNodes = current.nodes.filter(node => node.id !== nodeId);
+    
+    // Remove all edges connected to this node
+    const updatedEdges = current.edges.filter(edge => 
+      edge.source !== nodeId && edge.target !== nodeId
+    );
+
+    // Clear selection if the deleted node was selected
+    const selectedNode = get().selectedNode;
+    const newSelectedNode = selectedNode?.id === nodeId ? null : selectedNode;
+
+    set({
+      currentWorkflow: {
+        ...current,
+        nodes: updatedNodes,
+        edges: updatedEdges,
+        lastModified: new Date()
+      },
+      selectedNode: newSelectedNode
+    });
+  },
+
+  deleteSelectedNodes: () => {
+    const current = get().currentWorkflow;
+    const selectedNode = get().selectedNode;
+    
+    if (!current || !selectedNode) return;
+
+    get().deleteNode(selectedNode.id);
   },
   
   saveWorkflow: () => {

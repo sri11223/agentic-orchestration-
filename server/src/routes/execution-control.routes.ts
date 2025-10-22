@@ -8,10 +8,10 @@ import { rateLimit } from '../middleware/rate-limit';
 const router = Router();
 const eventBus = EventBus.getInstance();
 
-// Rate limiting for execution operations
+// Rate limiting for execution operations - increased for testing and development
 const executionRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 20, // 20 executions per minute
+  max: 200, // 200 executions per minute (for testing workflows)
   keyPrefix: 'execution:'
 });
 

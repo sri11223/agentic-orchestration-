@@ -7,10 +7,10 @@ import { cacheService } from '../services/cache.service';
 
 const router = Router();
 
-// Rate limiting for execution routes
+// Rate limiting for execution routes - increased for workflow builder usage
 const executionRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 50, // 50 requests per minute
+  max: 500, // 500 requests per minute (for checking execution status frequently)
   keyPrefix: 'execution:'
 });
 

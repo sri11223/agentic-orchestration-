@@ -5,15 +5,13 @@ import { authenticate, authorize, checkOwnership } from '../middleware/auth.midd
 import { rateLimit } from '../middleware/rate-limit';
 import { cacheService } from '../services/cache.service';
 import { lockService } from '../services/lock.service';
+import { getCurrentRateLimits } from '../config/rate-limits';
 
 const router = Router();
 
-// Rate limiting for workflow operations - relaxed for testing
-const workflowRateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100, // 100 requests per minute (relaxed for testing)
-  keyPrefix: 'workflow:'
-});
+// Rate limiting for workflow operations - environment-aware
+const rateLimits = getCurrentRateLimits();
+const workflowRateLimit = rateLimit(rateLimits.workflows);
 
 /**
  * Get all workflows with filtering and pagination
@@ -251,6 +249,116 @@ router.get('/:id',
       res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to fetch workflow'
+      });
+    }
+  }
+);
+
+/**
+ * Update workflow by ID
+ */
+router.put('/:id',
+  authenticate,
+  workflowRateLimit,
+  [
+    body('name').optional().isString().isLength({ min: 1, max: 100 }).withMessage('Name must be 1-100 characters'),
+    body('description').optional().isString().isLength({ max: 500 }).withMessage('Description must be max 500 characters'),
+    body('nodes').optional().isArray().withMessage('Nodes must be an array'),
+    body('edges').optional().isArray().withMessage('Edges must be an array'),
+    body('status').optional().isIn(['draft', 'active', 'archived']).withMessage('Invalid status'),
+    body('category').optional().isString().withMessage('Category must be a string'),
+    body('tags').optional().isArray().withMessage('Tags must be an array'),
+    body('metadata').optional().isObject().withMessage('Metadata must be an object')
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      console.log('🔄 PUT /api/workflows/:id route handler started');
+      console.log('📝 Workflow ID:', req.params.id);
+      console.log('👤 User:', { userId: req.user?.userId, _id: req.user?._id });
+
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        console.log('❌ Validation errors:', errors.array());
+        return res.status(400).json({
+          error: 'Validation failed',
+          details: errors.array()
+        });
+      }
+
+      const { id } = req.params;
+      const updateData = req.body;
+
+      // Find workflow and check permissions
+      const workflow = await WorkflowModel.findById(id);
+      if (!workflow) {
+        console.log('❌ Workflow not found:', id);
+        return res.status(404).json({
+          error: 'Workflow not found'
+        });
+      }
+
+      // Check if user has permission to update
+      const userId = req.user.userId || req.user._id || req.user.id;
+      const hasPermission = req.user.role === 'admin' || 
+                           workflow.permissions.owners.includes(userId) ||
+                           workflow.permissions.editors.includes(userId);
+
+      if (!hasPermission) {
+        console.log('❌ Access denied for user:', userId);
+        return res.status(403).json({
+          error: 'Access denied',
+          message: 'You do not have permission to update this workflow'
+        });
+      }
+
+      // Update workflow
+      const updatedWorkflow = await WorkflowModel.findByIdAndUpdate(
+        id,
+        {
+          ...updateData,
+          'metadata.updatedAt': new Date(),
+          'metadata.updatedBy': userId
+        },
+        { 
+          new: true, 
+          runValidators: true 
+        }
+      );
+
+      if (!updatedWorkflow) {
+        console.log('❌ Failed to update workflow:', id);
+        return res.status(500).json({
+          error: 'Failed to update workflow'
+        });
+      }
+
+      // Clear cache
+      await cacheService.del(`workflow:${id}`);
+      await cacheService.del(`workflows:user:${req.user._id}`);
+
+      console.log('✅ Workflow updated successfully:', {
+        id: updatedWorkflow._id,
+        name: updatedWorkflow.name,
+        nodesCount: updatedWorkflow.nodes?.length || 0,
+        edgesCount: updatedWorkflow.edges?.length || 0
+      });
+
+      // Convert _id to id for frontend compatibility
+      const responseWorkflow = {
+        ...updatedWorkflow.toObject(),
+        id: String(updatedWorkflow._id)
+      }; 
+
+      res.json({
+        message: 'Workflow updated successfully',
+        workflow: responseWorkflow
+      });
+
+    } catch (error) {
+      console.error('Update workflow error:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to update workflow'
       });
     }
   }

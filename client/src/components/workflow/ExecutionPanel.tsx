@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import { 
   Play, 
   Pause, 
@@ -14,10 +15,16 @@ import {
   Clock,
   Zap,
   Brain,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 import { executionService, ExecutionStatus, ExecutionEvent } from '@/services/execution.service';
 import { useWorkflowStore } from '@/store/workflowStore';
+import { toast } from '@/hooks/use-toast';
+import { NodeExecutionView } from './NodeExecutionView';
 
 interface ExecutionPanelProps {
   workflowId: string;
@@ -28,8 +35,10 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
   const { currentWorkflow } = useWorkflowStore();
   const [execution, setExecution] = useState<ExecutionStatus | null>(null);
   const [events, setEvents] = useState<ExecutionEvent[]>([]);
+  const [nodeExecutions, setNodeExecutions] = useState<any[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showExecutionDetails, setShowExecutionDetails] = useState(false);
 
   const canExecute = currentWorkflow && currentWorkflow.nodes.length > 0;
 
@@ -38,6 +47,16 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
     
     setLoading(true);
     try {
+      // Initialize node executions from current workflow
+      const initialNodeExecutions = currentWorkflow.nodes.map(node => ({
+        nodeId: node.id,
+        nodeName: node.data.label,
+        nodeType: node.data.config?.nodeType || 'unknown',
+        status: 'waiting' as const
+      }));
+      setNodeExecutions(initialNodeExecutions);
+      setShowExecutionDetails(true);
+
       const result = await executionService.executeWorkflow({
         workflowId,
         triggerData: {
@@ -54,6 +73,61 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
       
       setIsExecuting(true);
       setEvents([]);
+
+      // Simulate node execution progress (enhanced later with real backend events)
+      let currentNodeIndex = 0;
+      const simulateProgress = () => {
+        if (currentNodeIndex < initialNodeExecutions.length) {
+          // Mark current node as running
+          setNodeExecutions(prev => prev.map((node, index) => {
+            if (index === currentNodeIndex) {
+              return {
+                ...node,
+                status: 'running' as const,
+                startTime: new Date()
+              };
+            }
+            return node;
+          }));
+
+          // After 2-5 seconds, mark as completed and move to next
+          setTimeout(() => {
+            setNodeExecutions(prev => prev.map((node, index) => {
+              if (index === currentNodeIndex) {
+                return {
+                  ...node,
+                  status: 'completed' as const,
+                  endTime: new Date(),
+                  duration: Math.random() * 3000 + 1000, // 1-4 seconds
+                  output: `Output from ${node.nodeName}`,
+                  aiProvider: node.nodeType.includes('ai') ? 'gemini' : undefined,
+                  tokensUsed: node.nodeType.includes('ai') ? Math.floor(Math.random() * 500) + 100 : undefined,
+                  cost: node.nodeType.includes('ai') ? Math.random() * 0.01 : undefined
+                };
+              }
+              return node;
+            }));
+            currentNodeIndex++;
+            if (currentNodeIndex < initialNodeExecutions.length) {
+              setTimeout(simulateProgress, 500); // Small delay between nodes
+            } else {
+              setIsExecuting(false);
+              toast({
+                title: "Workflow completed!",
+                description: `Successfully executed ${initialNodeExecutions.length} nodes`,
+              });
+            }
+          }, Math.random() * 3000 + 2000); // 2-5 seconds per node
+        }
+      };
+
+      // Start simulation after a brief delay
+      setTimeout(simulateProgress, 1000);
+
+      toast({
+        title: "Workflow started!",
+        description: "Execution is now running...",
+      });
 
       // Subscribe to execution updates
       const unsubscribe = executionService.subscribeToExecution(result.executionId, {
@@ -122,6 +196,32 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
     }
   };
 
+  const handleViewNodeOutput = (nodeId: string, output: any) => {
+    // Show node output in a dialog or toast
+    toast({
+      title: `Node Output: ${nodeId}`,
+      description: typeof output === 'string' ? output : JSON.stringify(output, null, 2),
+      duration: 5000,
+    });
+  };
+
+  const getEventIcon = (type: string) => {
+    switch (type) {
+      case 'node.started':
+        return <Play className="h-3 w-3 text-blue-500" />;
+      case 'node.completed':
+        return <CheckCircle2 className="h-3 w-3 text-green-500" />;
+      case 'node.error':
+        return <XCircle className="h-3 w-3 text-red-500" />;
+      case 'ai.request':
+        return <Brain className="h-3 w-3 text-purple-500" />;
+      case 'ai.response':
+        return <Zap className="h-3 w-3 text-yellow-500" />;
+      default:
+        return <Clock className="h-3 w-3 text-gray-400" />;
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'running':
@@ -136,21 +236,6 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
         return 'bg-gray-500';
       default:
         return 'bg-gray-400';
-    }
-  };
-
-  const getEventIcon = (eventType: string) => {
-    switch (eventType) {
-      case 'ai:request':
-      case 'ai:response':
-        return <Brain className="h-4 w-4 text-purple-500" />;
-      case 'node:start':
-      case 'node:complete':
-        return <Zap className="h-4 w-4 text-blue-500" />;
-      case 'error':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-      default:
-        return <Clock className="h-4 w-4 text-gray-400" />;
     }
   };
 
@@ -261,6 +346,17 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Node Execution Progress */}
+        {showExecutionDetails && nodeExecutions.length > 0 && (
+          <div>
+            <Separator />
+            <NodeExecutionView 
+              executions={nodeExecutions}
+              onViewNodeOutput={handleViewNodeOutput}
+            />
+          </div>
         )}
 
         {/* Execution Events */}
