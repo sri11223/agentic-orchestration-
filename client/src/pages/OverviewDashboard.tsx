@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 
 const OverviewDashboard = () => {
+  const navigate = useNavigate();
   const [workflowsData, setWorkflowsData] = useState<WorkflowsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('workflows');
@@ -256,8 +258,8 @@ const OverviewDashboard = () => {
                       key={workflow.id}
                       className="group hover:border-primary/50 transition-all cursor-pointer"
                       onClick={() => {
-                        // Navigate to workflow builder
-                        window.location.href = `/workflow/${workflow.id}`;
+                        console.log('🔗 Navigating to workflow:', workflow.id);
+                        navigate(`/workflow/${workflow.id}`);
                       }}
                     >
                       <CardHeader>

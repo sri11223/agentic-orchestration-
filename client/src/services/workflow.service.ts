@@ -1,3 +1,5 @@
+import { authService } from './auth.service';
+
 const API_BASE_URL = 'http://localhost:5000';
 
 export interface WorkflowNode {
@@ -56,13 +58,39 @@ export interface CreateWorkflowRequest {
   category?: string;
 }
 
+export interface UpdateWorkflowRequest {
+  name?: string;
+  description?: string;
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
+  category?: string;
+  status?: 'draft' | 'active' | 'archived';
+}
+
+export interface ExecutionRequest {
+  triggerData?: Record<string, any>;
+}
+
+export interface ExecutionResponse {
+  executionId: string;
+  status: 'started' | 'running' | 'completed' | 'failed';
+  message: string;
+}
+
 class WorkflowService {
-  private getAuthHeaders() {
-    const token = localStorage.getItem('accessToken');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': token ? `Bearer ${token}` : '',
-    };
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    try {
+      const token = await authService.getValidToken();
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+    } catch (error) {
+      console.error('❌ Failed to get valid token:', error);
+      return {
+        'Content-Type': 'application/json',
+      };
+    }
   }
 
   async getWorkflows(params?: {
@@ -84,9 +112,10 @@ class WorkflowService {
     const url = `${API_BASE_URL}/api/workflows${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     
     try {
+      const headers = await this.getAuthHeaders();
       const response = await fetch(url, {
         method: 'GET',
-        headers: this.getAuthHeaders(),
+        headers,
       });
 
       if (!response.ok) {
@@ -117,9 +146,10 @@ class WorkflowService {
     console.log('🚀 Creating new workflow:', workflowData);
     
     try {
+      const headers = await this.getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/api/workflows`, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
+        headers,
         body: JSON.stringify(workflowData),
       });
 
@@ -148,9 +178,10 @@ class WorkflowService {
     console.log('🔄 Updating workflow:', id, workflowData);
     
     try {
+      const headers = await this.getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
         method: 'PUT',
-        headers: this.getAuthHeaders(),
+        headers,
         body: JSON.stringify(workflowData),
       });
 
@@ -168,13 +199,45 @@ class WorkflowService {
     }
   }
 
+  async getWorkflow(id: string): Promise<Workflow> {
+    console.log('🔍 Fetching workflow by ID:', id);
+    
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw error;
+      }
+
+      const result = await response.json();
+      console.log('✅ Workflow fetched successfully:', result);
+      
+      // Map _id to id for frontend compatibility
+      const workflow = {
+        ...result.workflow,
+        id: result.workflow._id
+      };
+      
+      return workflow;
+    } catch (error) {
+      console.error('❌ Error fetching workflow:', error);
+      throw error;
+    }
+  }
+
   async deleteWorkflow(id: string): Promise<void> {
     console.log('🗑️ Deleting workflow:', id);
     
     try {
+      const headers = await this.getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
         method: 'DELETE',
-        headers: this.getAuthHeaders(),
+        headers,
       });
 
       if (!response.ok) {
@@ -185,6 +248,58 @@ class WorkflowService {
       console.log('✅ Workflow deleted successfully');
     } catch (error) {
       console.error('❌ Error deleting workflow:', error);
+      throw error;
+    }
+  }
+
+  async executeWorkflow(id: string, executionData?: ExecutionRequest): Promise<ExecutionResponse> {
+    console.log('🚀 Executing workflow:', id, executionData);
+    
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/api/execution/workflows/${id}/execute`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(executionData || {}),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw error;
+      }
+
+      const result = await response.json();
+      console.log('✅ Workflow execution started:', result);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Error executing workflow:', error);
+      throw error;
+    }
+  }
+
+  async testAINode(nodeConfig: any): Promise<any> {
+    console.log('🧪 Testing AI node:', nodeConfig);
+    
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/api/ai/test`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(nodeConfig),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw error;
+      }
+
+      const result = await response.json();
+      console.log('✅ AI node test successful:', result);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Error testing AI node:', error);
       throw error;
     }
   }

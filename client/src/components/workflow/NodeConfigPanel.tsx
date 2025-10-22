@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AINodeConfig } from './AINodeConfig';
+import { workflowService } from '@/services/workflow.service';
 
 const NodeConfigPanel = () => {
   const { selectedNode, setSelectedNode, updateNodeData } = useWorkflowStore();
@@ -39,72 +41,62 @@ const NodeConfigPanel = () => {
     updateNodeData(selectedNode.id, { label });
   };
   
+  const handleAITest = async (config: any) => {
+    try {
+      // Use the execution service to test AI configuration
+      const result = await fetch('http://localhost:5000/api/ai/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          prompt: config.prompt,
+          taskType: config.taskType,
+          aiProvider: config.aiProvider,
+          model: config.model,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens
+        })
+      });
+      
+      if (!result.ok) throw new Error('AI test failed');
+      const data = await result.json();
+      return {
+        text: data.text || data.response,
+        provider: data.provider,
+        tokensUsed: data.tokensUsed,
+        cost: data.cost,
+        confidence: data.confidence
+      };
+    } catch (error) {
+      throw new Error(error.message || 'AI test failed');
+    }
+  };
+  
   const renderConfigForm = () => {
     const nodeType = selectedNode.data.config?.nodeType;
     
+    // AI Node Types - Use our comprehensive AI configuration
+    if (['ai-text-generator', 'ai-decision-maker', 'ai-data-extractor', 'ai-web-researcher'].includes(nodeType)) {
+      return (
+        <AINodeConfig
+          nodeId={selectedNode.id}
+          initialData={selectedNode.data.config}
+          onSave={(aiConfig) => {
+            updateNodeData(selectedNode.id, {
+              config: {
+                ...selectedNode.data.config,
+                ...aiConfig
+              }
+            });
+          }}
+          onTest={handleAITest}
+        />
+      );
+    }
+    
     switch (nodeType) {
-      case 'ai-text-generator':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label>Model</Label>
-              <Select
-                value={selectedNode.data.config?.model || 'gemini-2.5-flash'}
-                onValueChange={(value) => updateConfig('model', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                  <SelectItem value="groq-llama-3.3">Groq Llama 3.3</SelectItem>
-                  <SelectItem value="gpt-4">GPT-4</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label>System Prompt</Label>
-              <Textarea
-                value={selectedNode.data.config?.systemPrompt || ''}
-                onChange={(e) => updateConfig('systemPrompt', e.target.value)}
-                placeholder="You are a helpful assistant..."
-                rows={3}
-              />
-            </div>
-            
-            <div>
-              <Label>User Prompt</Label>
-              <Textarea
-                value={selectedNode.data.config?.userPrompt || ''}
-                onChange={(e) => updateConfig('userPrompt', e.target.value)}
-                placeholder="Use {{variables}} to reference data"
-                rows={3}
-              />
-            </div>
-            
-            <div>
-              <Label>Temperature: {selectedNode.data.config?.temperature || 0.7}</Label>
-              <Slider
-                value={[selectedNode.data.config?.temperature || 0.7]}
-                onValueChange={(value) => updateConfig('temperature', value[0])}
-                min={0}
-                max={1}
-                step={0.1}
-                className="mt-2"
-              />
-            </div>
-            
-            <div>
-              <Label>Max Tokens</Label>
-              <Input
-                type="number"
-                value={selectedNode.data.config?.maxTokens || 1000}
-                onChange={(e) => updateConfig('maxTokens', parseInt(e.target.value))}
-              />
-            </div>
-          </div>
-        );
         
       case 'condition':
         return (

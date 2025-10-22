@@ -30,13 +30,25 @@ router.get('/',
   ],
   async (req: Request, res: Response) => {
     try {
+      console.log('🚀 GET /api/workflows route handler started');
+      console.log('📝 Request query:', req.query);
+      console.log('👤 Request user:', { 
+        userId: req.user?.userId, 
+        _id: req.user?._id, 
+        id: req.user?.id, 
+        role: req.user?.role 
+      });
+
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        console.log('❌ Validation errors:', errors.array());
         return res.status(400).json({
           error: 'Validation failed',
           details: errors.array()
         });
       }
+
+      console.log('✅ Validation passed');
 
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
@@ -178,6 +190,67 @@ router.post('/',
       res.status(500).json({
         error: 'Internal server error',
         message: 'Failed to create workflow'
+      });
+    }
+  }
+);
+
+/**
+ * Get workflow by ID
+ */
+router.get('/:id',
+  authenticate,
+  workflowRateLimit,
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      // Get consistent user ID
+      const userId = req.user?.userId || req.user?._id || req.user?.id;
+      console.log('GET workflow by ID - Using userId:', userId, 'Workflow ID:', id);
+      
+      // Find workflow by ID
+      const workflow = await WorkflowModel.findById(id)
+        .populate('metadata.creator', 'username email')
+        .populate('metadata.lastEditor', 'username email');
+
+      if (!workflow) {
+        return res.status(404).json({
+          error: 'Workflow not found',
+          message: 'The requested workflow does not exist'
+        });
+      }
+
+      // Check permissions
+      if (req.user.role !== 'admin') {
+        const hasPermission = 
+          workflow.permissions.owners.includes(userId) ||
+          workflow.permissions.editors.includes(userId) ||
+          workflow.permissions.viewers.includes(userId);
+
+        if (!hasPermission) {
+          return res.status(403).json({
+            error: 'Access denied',
+            message: 'You do not have permission to access this workflow'
+          });
+        }
+      }
+
+      console.log('✅ Workflow found and access granted:', {
+        id: workflow._id,
+        name: workflow.name,
+        owner: workflow.permissions.owners[0]
+      });
+
+      res.json({
+        workflow
+      });
+
+    } catch (error) {
+      console.error('Get workflow by ID error:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to fetch workflow'
       });
     }
   }

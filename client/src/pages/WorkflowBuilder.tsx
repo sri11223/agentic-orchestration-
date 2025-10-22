@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -14,8 +14,10 @@ import CustomNode from '@/components/workflow/CustomNode';
 import NodePalette from '@/components/workflow/NodePalette';
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel';
 import WorkflowNavbar from '@/components/workflow/WorkflowNavbar';
+import { ExecutionPanel } from '@/components/workflow/ExecutionPanel';
 import { useParams } from 'react-router-dom';
 import { demoWorkflow } from '@/data/demoWorkflow';
+import { workflowService } from '@/services/workflow.service';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -24,6 +26,7 @@ const nodeTypes = {
 const WorkflowBuilderContent = () => {
   const { id } = useParams();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(false);
   
   const {
     currentWorkflow,
@@ -36,22 +39,54 @@ const WorkflowBuilderContent = () => {
   } = useWorkflowStore();
   
   useEffect(() => {
-    // Load workflow
-    if (id === 'new') {
-      // For new workflows, check if we already have a current workflow
-      if (!currentWorkflow) {
-        useWorkflowStore.getState().createNewWorkflow();
+    const loadWorkflow = async () => {
+      if (id === 'new') {
+        // For new workflows, check if we already have a current workflow
+        if (!currentWorkflow) {
+          useWorkflowStore.getState().createNewWorkflow();
+        }
+      } else if (id) {
+        // First check if it's the demo workflow
+        if (id === demoWorkflow.id) {
+          setCurrentWorkflow(demoWorkflow);
+          return;
+        }
+
+        // Try to load from local store first
+        const workflows = useWorkflowStore.getState().workflows;
+        const localWorkflow = workflows.find(w => w.id === id);
+        if (localWorkflow) {
+          console.log('📁 Loading workflow from local store:', id);
+          setCurrentWorkflow(localWorkflow);
+          return;
+        }
+
+        // If not found locally, try to load from backend
+        try {
+          setLoading(true);
+          console.log('🌐 Loading workflow from backend:', id);
+          const workflow = await workflowService.getWorkflow(id);
+          
+          // Convert backend workflow to store format
+          const storeWorkflow = {
+            ...workflow,
+            id: workflow.id || id!, // Ensure ID is present
+            lastModified: new Date(workflow.metadata?.updatedAt || Date.now()),
+            executionCount: 0 // TODO: Get from execution history
+          };
+          
+          setCurrentWorkflow(storeWorkflow);
+          console.log('✅ Workflow loaded from backend successfully');
+        } catch (error) {
+          console.error('❌ Failed to load workflow from backend:', error);
+          // TODO: Show error message to user
+        } finally {
+          setLoading(false);
+        }
       }
-    } else if (id) {
-      // Load existing workflow or demo
-      const workflows = useWorkflowStore.getState().workflows;
-      const workflow = workflows.find(w => w.id === id);
-      if (workflow) {
-        setCurrentWorkflow(workflow);
-      } else if (id === demoWorkflow.id) {
-        setCurrentWorkflow(demoWorkflow);
-      }
-    }
+    };
+
+    loadWorkflow();
   }, [id]);
   
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -100,10 +135,12 @@ const WorkflowBuilderContent = () => {
     [setSelectedNode]
   );
   
-  if (!currentWorkflow) {
+  if (!currentWorkflow || loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-muted-foreground">Loading workflow...</div>
+        <div className="text-muted-foreground">
+          {loading ? 'Loading workflow from backend...' : 'Loading workflow...'}
+        </div>
       </div>
     );
   }
@@ -165,8 +202,17 @@ const WorkflowBuilderContent = () => {
             </div>
           )}
         </div>
-        
-        <NodeConfigPanel />
+
+        {/* Right Panel - Execution + Configuration */}
+        <div className="w-80 flex flex-col border-l border-border bg-card/50 backdrop-blur-lg">
+          <ExecutionPanel 
+            workflowId={currentWorkflow.id} 
+            className="border-0 rounded-none border-b" 
+          />
+          <div className="flex-1 overflow-auto">
+            <NodeConfigPanel />
+          </div>
+        </div>
       </div>
     </div>
   );

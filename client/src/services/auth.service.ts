@@ -37,6 +37,9 @@ export interface ApiError {
 }
 
 class AuthService {
+  private isRefreshing = false;
+  private refreshPromise: Promise<string> | null = null;
+
   async login(data: LoginRequest): Promise<AuthResponse> {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
@@ -132,6 +135,83 @@ class AuthService {
 
   isAuthenticated(): boolean {
     return !!this.getToken();
+  }
+
+  async refreshToken(): Promise<string> {
+    // If already refreshing, return the existing promise
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = this._performTokenRefresh(refreshToken);
+
+    try {
+      const newAccessToken = await this.refreshPromise;
+      return newAccessToken;
+    } finally {
+      this.isRefreshing = false;
+      this.refreshPromise = null;
+    }
+  }
+
+  private async _performTokenRefresh(refreshToken: string): Promise<string> {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      // Refresh token is invalid, force logout
+      this.logout();
+      throw new Error('Token refresh failed');
+    }
+
+    const result = await response.json();
+    
+    // Store new tokens
+    localStorage.setItem('accessToken', result.tokens.accessToken);
+    localStorage.setItem('refreshToken', result.tokens.refreshToken);
+    
+    return result.tokens.accessToken;
+  }
+
+  isTokenExpired(token?: string): boolean {
+    const accessToken = token || this.getToken();
+    if (!accessToken) return true;
+
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      // Check if token expires in the next 5 minutes (300 seconds)
+      return payload.exp < (currentTime + 300);
+    } catch {
+      return true;
+    }
+  }
+
+  async getValidToken(): Promise<string> {
+    const currentToken = this.getToken();
+    
+    if (!currentToken) {
+      throw new Error('No access token available');
+    }
+
+    // If token is about to expire, refresh it
+    if (this.isTokenExpired(currentToken)) {
+      console.log('🔄 Token expiring soon, refreshing...');
+      return await this.refreshToken();
+    }
+
+    return currentToken;
   }
 }
 

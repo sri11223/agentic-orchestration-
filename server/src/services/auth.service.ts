@@ -16,8 +16,8 @@ interface TokenPair {
 class AuthService {
   private readonly accessTokenSecret: string;
   private readonly refreshTokenSecret: string;
-  private readonly accessTokenExpiry: string = '15m';
-  private readonly refreshTokenExpiry: string = '7d';
+  private readonly accessTokenExpiry: string = '2h'; // Extended from 15m to 2h
+  private readonly refreshTokenExpiry: string = '30d'; // Extended from 7d to 30d
 
   constructor() {
     this.accessTokenSecret = process.env.JWT_ACCESS_SECRET || 'your-access-secret-key';

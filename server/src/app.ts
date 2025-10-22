@@ -17,6 +17,7 @@ import dashboardRoutes from './routes/dashboard.routes';
 import monitoringRoutes from './routes/monitoring.routes';
 import adminRoutes from './routes/admin.routes';
 import webhookRoutes from './routes/webhook.routes';
+import aiRoutes from './routes/ai.routes';
 
 // Import middleware
 import { rateLimit } from './middleware/rate-limit';
@@ -106,6 +107,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api', executionControlRoutes);
 
 // 404 handler - catch all unmatched routes
