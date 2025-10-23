@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { workflowService, WorkflowsResponse } from '@/services/workflow.service';
 import { useWorkflowCreation } from '@/hooks/useWorkflowCreation';
+import { useWorkflowStore } from '@/store/workflowStore';
+import { WorkflowPreview } from '@/components/workflow/WorkflowPreview';
+import { demoWorkflow } from '@/data/demoWorkflow';
 import { 
   Plus, 
   Play, 
@@ -28,6 +31,9 @@ const OverviewDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('workflows');
   
+  // Get workflows from store as fallback
+  const { workflows } = useWorkflowStore();
+  
   // Get user info for welcome message
   const userStr = localStorage.getItem('user');
   const user = userStr ? JSON.parse(userStr) : { username: 'User' };
@@ -40,21 +46,35 @@ const OverviewDashboard = () => {
       setWorkflowsData(data);
       console.log('📊 Dashboard metrics updated:', data);
     } catch (error) {
-      console.error('Failed to fetch workflows:', error);
-      // Set default data if backend fails
+      console.error('Failed to fetch workflows from backend:', error);
+      // Use store workflows as fallback
+      console.log('🔄 Using store workflows as fallback:', workflows);
       setWorkflowsData({
-        workflows: [],
+        workflows: workflows.map(w => ({
+          id: w.id,
+          name: w.name,
+          description: w.description,
+          nodes: w.nodes.map(node => ({
+            ...node,
+            type: node.type ?? 'default' // Ensure 'type' is present, fallback to 'default'
+          })),
+          edges: w.edges,
+          status: w.status,
+          metadata: {
+            updatedAt: w.lastModified.toISOString()
+          }
+        })),
         pagination: {
-          total: 0,
+          total: workflows.length,
           page: 1,
-          limit: 10,
-          pages: 0
+          limit: 100,
+          pages: 1
         }
       });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workflows]);
 
   const { createWorkflow, creating } = useWorkflowCreation(() => {
     // Refresh dashboard data after workflow creation
@@ -62,6 +82,11 @@ const OverviewDashboard = () => {
   });
 
   useEffect(() => {
+    // Initialize with demo workflow if store is empty
+    if (workflows.length === 0) {
+      console.log('🔄 Initializing store with demo workflow');
+      useWorkflowStore.setState({ workflows: [demoWorkflow] });
+    }
     fetchWorkflows();
   }, []);
 
@@ -279,12 +304,12 @@ const OverviewDashboard = () => {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-4">
-                          {/* Workflow preview */}
-                          <div className="h-32 bg-background rounded-lg border border-border flex items-center justify-center">
-                            <div className="text-muted-foreground text-sm">
-                              {workflow.nodes?.length || 0} nodes, {workflow.edges?.length || 0} connections
-                            </div>
-                          </div>
+                          {/* Visual Workflow preview */}
+                          <WorkflowPreview 
+                            nodes={workflow.nodes || []} 
+                            edges={workflow.edges || []}
+                            className="h-32"
+                          />
                           
                           {/* Metadata */}
                           <div className="flex items-center justify-between text-sm text-muted-foreground">

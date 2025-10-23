@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Plus, Play, Copy, Trash2, Edit } from 'lucide-react';
 import { demoWorkflow } from '@/data/demoWorkflow';
+import { WorkflowPreview } from '@/components/workflow/WorkflowPreview';
 
 const WorkflowsList = () => {
   const { workflows, setCurrentWorkflow, createNewWorkflow, deleteWorkflow } = useWorkflowStore();
@@ -95,12 +96,12 @@ const WorkflowsList = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {/* Workflow preview */}
-                    <div className="h-32 bg-background rounded-lg border border-border flex items-center justify-center">
-                      <div className="text-muted-foreground text-sm">
-                        {workflow.nodes.length} nodes, {workflow.edges.length} connections
-                      </div>
-                    </div>
+                    {/* Visual Workflow preview */}
+                    <WorkflowPreview 
+                      nodes={workflow.nodes} 
+                      edges={workflow.edges}
+                      className="h-32"
+                    />
                     
                     {/* Metadata */}
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
