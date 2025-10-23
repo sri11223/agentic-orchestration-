@@ -32,20 +32,38 @@ const mapBackendToFrontendNodeType = (backendType: string): string => {
     // Triggers
     'trigger': 'manual-trigger',
     'timer': 'schedule-trigger',
+    'schedule': 'schedule-trigger',
+    'email': 'email-trigger',
+    'webhook': 'webhook-trigger',
     
     // AI Agents  
     'ai_processor': 'ai-text-generator',
+    'ai_text': 'ai-text-generator',
+    'ai_decision': 'ai-decision-maker',
+    'ai_extractor': 'ai-data-extractor',
+    'ai_researcher': 'ai-web-researcher',
     
     // Actions
     'action': 'http-request',
+    'http': 'http-request',
     'email_automation': 'send-email',
+    'email_send': 'send-email',
+    'database': 'database-query',
+    'slack': 'slack-message',
     
     // Logic
     'decision': 'condition',
+    'condition': 'condition',
+    'switch': 'switch',
+    'loop': 'loop',
+    'merge': 'merge',
     
     // Human
     'human_task': 'approval-request',
+    'approval': 'approval-request',
     'form_builder': 'form-input',
+    'form': 'form-input',
+    'manual': 'manual-task',
     
     // Others
     'file_operations': 'http-request',
@@ -101,20 +119,15 @@ const WorkflowBuilderContent = () => {
           return;
         }
 
-        // Try to load from local store first
-        const workflows = useWorkflowStore.getState().workflows;
-        const localWorkflow = workflows.find(w => w.id === id);
-        if (localWorkflow) {
-          console.log('📁 Loading workflow from local store:', id);
-          setCurrentWorkflow(localWorkflow);
-          return;
-        }
-
-        // If not found locally, try to load from backend
+        // Always try to load from backend first for latest data
         try {
           setLoading(true);
           console.log('🌐 Loading workflow from backend:', id);
           const workflow = await workflowService.getWorkflow(id);
+          
+          if (!workflow) {
+            throw new Error('Workflow not found in backend');
+          }
           
           // Convert backend workflow to store format
           console.log('🔄 Converting backend workflow to frontend format:', workflow);
@@ -135,13 +148,23 @@ const WorkflowBuilderContent = () => {
               const frontendNodeType = mapBackendToFrontendNodeType(node.type);
               const nodeTypeConfig = nodeTypesList.find(nt => nt.type === frontendNodeType);
               
+              // Ensure we have proper category mapping
+              const category = nodeTypeConfig?.category || 'trigger';
+              
+              console.log('🎨 Node styling info:', {
+                nodeId: node.id,
+                frontendType: frontendNodeType,
+                category: category,
+                nodeTypeConfig: nodeTypeConfig?.label
+              });
+              
               return {
                 id: node.id,
                 type: 'custom', // All nodes use 'custom' type in ReactFlow
                 position: node.position || { x: 100, y: 100 },
                 data: {
                   label: node.data?.title || nodeTypeConfig?.label || 'Untitled Node',
-                  category: nodeTypeConfig?.category || 'trigger', // THIS WAS MISSING!
+                  category: category, // Critical for node styling
                   config: {
                     nodeType: frontendNodeType,
                     description: node.data?.description || '',
@@ -161,9 +184,92 @@ const WorkflowBuilderContent = () => {
           
           setCurrentWorkflow(storeWorkflow);
           console.log('✅ Workflow loaded from backend successfully');
+          console.log('🎨 Final workflow nodes with categories:', storeWorkflow.nodes.map(n => ({
+            id: n.id,
+            type: n.type,
+            category: n.data.category,
+            label: n.data.label
+          })));
+          
+          // Update the store with the latest backend data
+          const allWorkflows = useWorkflowStore.getState().workflows;
+          const workflowExists = allWorkflows.some(w => w.id === storeWorkflow.id);
+          if (!workflowExists) {
+            useWorkflowStore.setState({ 
+              workflows: [...allWorkflows, storeWorkflow] 
+            });
+          } else {
+            // Update existing workflow in store with latest backend data
+            const updatedWorkflows = allWorkflows.map(w => 
+              w.id === storeWorkflow.id ? storeWorkflow : w
+            );
+            useWorkflowStore.setState({ workflows: updatedWorkflows });
+          }
+          
+          // Force ReactFlow to re-render by updating the instance
+          setTimeout(() => {
+            console.log('🔄 Forcing ReactFlow refresh...');
+            reactFlowInstance.fitView();
+          }, 100);
+          
         } catch (error) {
           console.error('❌ Failed to load workflow from backend:', error);
-          // TODO: Show error message to user
+          
+          // Fallback to local store only if backend fails
+          console.log('🔄 Falling back to local store...');
+          const workflows = useWorkflowStore.getState().workflows;
+          const localWorkflow = workflows.find(w => w.id === id);
+          if (localWorkflow) {
+            console.log('📁 Loading workflow from local store as fallback:', id);
+            
+            // Ensure local workflow nodes have proper types and categories
+            const normalizedWorkflow = {
+              ...localWorkflow,
+              nodes: localWorkflow.nodes.map(node => {
+                // Check if node already has proper format
+                if (node.type === 'custom' && node.data.category) {
+                  return node;
+                }
+                
+                // Normalize node if needed
+                const frontendNodeType = node.data.config?.nodeType || mapBackendToFrontendNodeType(node.type);
+                const nodeTypeConfig = nodeTypesList.find(nt => nt.type === frontendNodeType);
+                const category = node.data.category || nodeTypeConfig?.category || 'trigger';
+                
+                console.log('🔧 Normalizing local node (fallback):', {
+                  nodeId: node.id,
+                  originalType: node.type,
+                  frontendType: frontendNodeType,
+                  category: category
+                });
+                
+                return {
+                  ...node,
+                  type: 'custom', // Ensure React Flow type is 'custom'
+                  data: {
+                    ...node.data,
+                    category: category, // Ensure category is set
+                    config: {
+                      nodeType: frontendNodeType,
+                      ...node.data.config
+                    }
+                  }
+                };
+              })
+            };
+            
+            setCurrentWorkflow(normalizedWorkflow);
+            
+            // Update the workflow in the store to maintain consistency
+            const allWorkflows = useWorkflowStore.getState().workflows;
+            const updatedWorkflows = allWorkflows.map(w => 
+              w.id === normalizedWorkflow.id ? normalizedWorkflow : w
+            );
+            useWorkflowStore.setState({ workflows: updatedWorkflows });
+          } else {
+            console.error('❌ Workflow not found in local store either');
+            // TODO: Show error message to user or redirect to dashboard
+          }
         } finally {
           setLoading(false);
         }
