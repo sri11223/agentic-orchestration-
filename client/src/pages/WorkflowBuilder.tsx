@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 import { useWorkflowStore, NodeData } from '@/store/workflowStore';
 import { nodeTypes as nodeTypesList } from '@/data/nodeTypes';
 import CustomNode from '@/components/workflow/CustomNode';
+import CustomEdge from '@/components/workflow/CustomEdge';
 import NodePalette from '@/components/workflow/NodePalette';
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel';
 import WorkflowNavbar from '@/components/workflow/WorkflowNavbar';
@@ -60,6 +61,10 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
+const edgeTypes = {
+  default: CustomEdge,
+};
+
 const WorkflowBuilderContent = () => {
   const { id } = useParams();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -75,6 +80,7 @@ const WorkflowBuilderContent = () => {
     addNode,
     setSelectedNode,
     deleteNode,
+    deleteEdge,
     deleteSelectedNodes,
   } = useWorkflowStore();
 
@@ -202,6 +208,12 @@ const WorkflowBuilderContent = () => {
     debouncedSave(); // Auto-save after connecting nodes
   }, [onConnect, debouncedSave]);
 
+  const handleDeleteEdge = useCallback((edgeId: string) => {
+    console.log('🗑️ Deleting edge:', edgeId);
+    deleteEdge(edgeId);
+    debouncedSave(); // Auto-save after deleting edge
+  }, [deleteEdge, debouncedSave]);
+
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
@@ -297,7 +309,10 @@ const WorkflowBuilderContent = () => {
 
           <ReactFlow
             nodes={currentWorkflow.nodes}
-            edges={currentWorkflow.edges}
+            edges={currentWorkflow.edges.map(edge => ({
+              ...edge,
+              data: { ...edge.data, onDelete: handleDeleteEdge }
+            }))}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={handleConnect}
@@ -305,8 +320,11 @@ const WorkflowBuilderContent = () => {
             onDragOver={onDragOver}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             className="bg-background"
+            elementsSelectable={true}
+            nodesDraggable={true}
           >
             <Background className="bg-background" />
             <Controls className="bg-card border-border" />

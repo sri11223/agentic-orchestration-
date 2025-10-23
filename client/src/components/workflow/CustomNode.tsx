@@ -66,14 +66,12 @@ const CustomNode = ({ data, selected, id }: NodeProps) => {
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
     >
-      {/* Input handle - hide for trigger nodes */}
-      {category !== 'trigger' && (
-        <Handle
-          type="target"
-          position={Position.Left}
-          className="!w-3 !h-3 !bg-primary !border-2 !border-background"
-        />
-      )}
+      {/* Input handle - now available for all nodes including triggers */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!w-3 !h-3 !bg-primary !border-2 !border-background"
+      />
       
       {/* Status indicator */}
       {typedData.status && (
@@ -109,6 +107,13 @@ const CustomNode = ({ data, selected, id }: NodeProps) => {
         </Button>
       )}
       
+      {/* Input handle - now available for all nodes including triggers */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!w-3 !h-3 !bg-primary !border-2 !border-background"
+      />
+
       {/* Output handle */}
       <Handle
         type="source"

@@ -41,6 +41,7 @@ interface WorkflowStore {
   onConnect: (connection: Connection) => void;
   addNode: (node: Node<NodeData>) => void;
   deleteNode: (nodeId: string) => void;
+  deleteEdge: (edgeId: string) => void;
   deleteSelectedNodes: () => void;
   
   // Workflow actions
@@ -165,6 +166,21 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         lastModified: new Date()
       },
       selectedNode: newSelectedNode
+    });
+  },
+
+  deleteEdge: (edgeId) => {
+    const current = get().currentWorkflow;
+    if (!current) return;
+
+    const updatedEdges = current.edges.filter(edge => edge.id !== edgeId);
+
+    set({
+      currentWorkflow: {
+        ...current,
+        edges: updatedEdges,
+        lastModified: new Date()
+      }
     });
   },
 

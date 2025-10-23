@@ -1,0 +1,30 @@
+/* Custom edge styles for better interaction */
+.react-flow__edge-interaction:hover + .react-flow__edge-path {
+  stroke: hsl(var(--primary)) !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 0 6px hsla(var(--primary), 0.4));
+}
+
+.react-flow__edge-path {
+  transition: all 0.2s ease;
+}
+
+.react-flow__edge-path:hover {
+  stroke: hsl(var(--primary)) !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 0 6px hsla(var(--primary), 0.4));
+}
+
+/* Make the edge selection more visible */
+.react-flow__edge.selected .react-flow__edge-path {
+  animation: pulse-edge 2s infinite;
+}
+
+@keyframes pulse-edge {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px hsla(var(--primary), 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px hsla(var(--primary), 0.8));
+  }
+}
