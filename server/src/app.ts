@@ -53,9 +53,19 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:8080',
+  origin: [
+    'http://localhost:8080',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+    process.env.FRONTEND_URL || 'http://localhost:8080'
+  ].filter(Boolean),
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Request parsing middleware
@@ -113,7 +123,14 @@ app.use('/api/monitoring', monitoringRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/triggers', require('./routes/trigger.routes').default);
 app.use('/api', executionControlRoutes);
+
+// Initialize trigger service after routes are set up
+setTimeout(() => {
+  const { triggerService } = require('./services/trigger.service');
+  console.log('🚀 Trigger service initialized');
+}, 2000);
 
 // 404 handler - catch all unmatched routes
 app.use((req, res) => {
@@ -212,10 +229,17 @@ process.on('unhandledRejection', (reason, promise) => {
 const startServer = async () => {
   try {
     await connectDatabase();
+    
+    // Initialize trigger service
+    console.log('🔧 Initializing trigger service...');
+    const { triggerService } = await import('./services/trigger.service');
+    console.log('✅ Trigger service initialized');
+    
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 Environment: ${process.env.NODE_ENV}`);
       console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:8080'}`);
+      console.log(`⚡ Trigger system ready for email, webhook, schedule, and manual triggers`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

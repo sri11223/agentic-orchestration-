@@ -26,11 +26,13 @@ export interface Workflow {
 interface WorkflowStore {
   workflows: Workflow[];
   currentWorkflow: Workflow | null;
+  workflowId: string | null;
   selectedNode: Node<NodeData> | null;
   executionStatus: ExecutionStatus;
   
   // Actions
   setCurrentWorkflow: (workflow: Workflow) => void;
+  setWorkflowId: (id: string | null) => void;
   updateWorkflowName: (name: string) => void;
   setSelectedNode: (node: Node<NodeData> | null) => void;
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
@@ -54,10 +56,16 @@ interface WorkflowStore {
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   workflows: [],
   currentWorkflow: null,
+  workflowId: null,
   selectedNode: null,
   executionStatus: 'idle',
   
-  setCurrentWorkflow: (workflow) => set({ currentWorkflow: workflow }),
+  setCurrentWorkflow: (workflow) => set({ 
+    currentWorkflow: workflow,
+    workflowId: workflow.id 
+  }),
+  
+  setWorkflowId: (id) => set({ workflowId: id }),
   
   updateWorkflowName: (name) => {
     const current = get().currentWorkflow;
