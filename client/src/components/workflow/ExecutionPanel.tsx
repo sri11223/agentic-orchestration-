@@ -369,9 +369,7 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
                 </div>
               </div>
               
-              {/* Progress bar - use fallback to UI node count when server returns no totalSteps */}
-              
-              
+                          
               {execution.error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
                   <strong>Error:</strong> {execution.error}
@@ -393,7 +391,13 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
             </div>
             
             {/* Scrollable node list */}
-            <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
+            <div 
+              className="max-h-80 overflow-y-auto space-y-2 pr-1"
+              style={{ 
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#9CA3AF #E5E7EB'
+              }}
+            >
               {nodeExecutions.map((nodeExecution, index) => {
                 // Get node details from workflow data
                 const workflowNode = currentWorkflow?.nodes?.find(n => n.id === nodeExecution.nodeId);
