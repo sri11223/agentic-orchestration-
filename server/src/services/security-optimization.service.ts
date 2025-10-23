@@ -296,7 +296,7 @@ export class SecurityOptimizationService {
         /(\.\.|\/etc\/|\/proc\/|\/sys\/)/i, // Path traversal
         /(script|javascript|vbscript|onload|onerror)/i, // XSS attempts
         /(union|select|insert|update|delete|drop|create|alter)/i, // SQL injection
-        /(eval|exec|system|shell_exec|passthru)/i // Code injection
+        /\b(eval|system|shell_exec|passthru)\b/i // Code injection (excluding exec to avoid false positives with executions)
       ];
 
       const userAgent = req.get('User-Agent') || '';

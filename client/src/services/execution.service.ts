@@ -33,7 +33,15 @@ class WorkflowExecutionService {
   private async request(endpoint: string, options: RequestInit = {}) {
     try {
       const token = await authService.getValidToken();
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      
+      // Add cache-busting parameter for GET requests to prevent 304 responses
+      let url = `${this.baseUrl}${endpoint}`;
+      if (!options.method || options.method === 'GET') {
+        const separator = endpoint.includes('?') ? '&' : '?';
+        url += `${separator}_t=${Date.now()}`;
+      }
+      
+      const response = await fetch(url, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +84,31 @@ class WorkflowExecutionService {
    */
   async getExecutionStatus(executionId: string): Promise<ExecutionStatus> {
     const result = await this.request(`/executions/${executionId}`);
-    return result.execution;
+
+    // Server returns { execution, events, progress }
+    const exec = result.execution;
+    const progress = result.progress || {
+      totalNodes: exec?.executionHistory?.length || 0,
+      completedNodes: exec?.executionHistory?.filter((h: any) => !h.error).length || 0,
+      failedNodes: exec?.executionHistory?.filter((h: any) => !!h.error).length || 0,
+    };
+
+    // Map to the client's ExecutionStatus shape
+    const mapped: ExecutionStatus = {
+      executionId: exec.executionId || exec._id || executionId,
+      status: exec.status,
+      progress: {
+        currentStep: progress.completedNodes || 0,
+        totalSteps: progress.totalNodes || 0,
+        currentNode: exec.currentNodeId || ''
+      },
+      startTime: exec.startTime,
+      endTime: exec.endTime,
+      error: exec.status === 'failed' ? (exec.executionHistory?.find((h: any) => h.error)?.error || 'Execution failed') : undefined,
+      result: exec.outputs || exec.variables || null
+    };
+
+    return mapped;
   }
 
   /**
@@ -190,13 +222,26 @@ class WorkflowExecutionService {
     onError?: (error: string) => void;
   }): () => void {
     // For now, use polling. In a real app, you'd use WebSocket
+    let retryCount = 0;
+    const maxRetries = 3;
+    
     const pollInterval = setInterval(async () => {
       try {
         const status = await this.getExecutionStatus(executionId);
+        
+        // Reset retry count on successful request
+        retryCount = 0;
+        
+        if (!status) {
+          console.warn('No status received, continuing to poll...');
+          return;
+        }
+
         callbacks.onProgress?.(status);
 
         if (status.status === 'completed') {
-          callbacks.onComplete?.(status.result);
+          // Provide the full execution status to the onComplete handler
+          callbacks.onComplete?.(status);
           clearInterval(pollInterval);
         } else if (status.status === 'failed') {
           callbacks.onError?.(status.error || 'Execution failed');
@@ -204,11 +249,23 @@ class WorkflowExecutionService {
         }
 
         // Get new events
-        const events = await this.getExecutionEvents(executionId);
-        events.forEach(event => callbacks.onEvent?.(event));
+        try {
+          const events = await this.getExecutionEvents(executionId);
+          events.forEach(event => callbacks.onEvent?.(event));
+        } catch (eventError) {
+          console.warn('Error fetching events:', eventError);
+        }
 
       } catch (error) {
         console.error('Error polling execution status:', error);
+        retryCount++;
+        
+        // If too many failures, stop polling
+        if (retryCount >= maxRetries) {
+          console.error(`Polling failed ${maxRetries} times, stopping...`);
+          callbacks.onError?.('Failed to get execution status after multiple retries');
+          clearInterval(pollInterval);
+        }
       }
     }, 2000);
 

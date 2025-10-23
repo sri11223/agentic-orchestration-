@@ -52,6 +52,16 @@ export class NodeExecutor {
    */
   async executeNode(node: INode, context: ExecutionContext): Promise<NodeExecutionResult> {
     try {
+      console.log('🔧 Executing node:', {
+        nodeId: node.id,
+        nodeType: node.type,
+        hasData: !!node.data,
+        hasConfig: !!node.data?.config,
+        configKeys: node.data?.config ? Object.keys(node.data.config) : [],
+        aiProvider: node.data?.config?.aiProvider,
+        promptLength: node.data?.config?.prompt?.length || 0
+      });
+
       switch (node.type) {
         case NodeType.TRIGGER:
           return this.executeTriggerNode(node, context);
@@ -117,6 +127,16 @@ export class NodeExecutor {
    * Execute AI processing node with smart provider routing
    */
   private async executeAINode(node: INode, context: ExecutionContext): Promise<NodeExecutionResult> {
+    const config = node.data?.config || node.data || {};
+    
+    console.log('🤖 AI Node execution details:', {
+      nodeId: node.id,
+      configData: config,
+      hasPrompt: !!config.prompt,
+      hasAiProvider: !!config.aiProvider,
+      hasModel: !!config.model
+    });
+
     const { 
       prompt, 
       taskType, 
@@ -126,7 +146,7 @@ export class NodeExecutor {
       maxTokens, 
       parseJson,
       context: nodeContext
-    } = node.data;
+    } = config;
     
     if (!prompt) {
       return { type: 'error', error: 'AI node requires prompt configuration' };

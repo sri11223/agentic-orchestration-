@@ -73,11 +73,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const current = get().currentWorkflow;
     if (!current) return;
     
+    console.log('🏪 Store - updateNodeData called:', {
+      nodeId,
+      data,
+      currentNodes: current.nodes.length
+    });
+    
     const updatedNodes = current.nodes.map(node =>
       node.id === nodeId
         ? { ...node, data: { ...node.data, ...data } }
         : node
     );
+    
+    console.log('🏪 Store - Node updated, triggering auto-save with lastModified');
     
     set({
       currentWorkflow: { ...current, nodes: updatedNodes, lastModified: new Date() }

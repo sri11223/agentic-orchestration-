@@ -100,11 +100,20 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
   const isSmartRouting = !config.aiProvider;
 
   const handleSave = () => {
-    onSave({
+    const saveData = {
       ...config,
       temperature: config.temperature,
       maxTokens: config.maxTokens
+    };
+    
+    console.log('🔧 AI Node Config - Saving configuration:', {
+      nodeId,
+      saveData
     });
+    
+    onSave(saveData);
+    
+    console.log('✅ AI Node Config - Save callback completed');
   };
 
   const handleTest = async () => {

@@ -247,6 +247,11 @@ export class WorkflowEngine extends EventEmitter {
     context.status = status;
     context.endTime = new Date();
     
+    // Only log in development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🎯 Execution completed:', context.executionId, status);
+    }
+    
     await this.persistExecution(context);
     this.runningExecutions.delete(context.executionId);
 
@@ -372,6 +377,11 @@ export class WorkflowEngine extends EventEmitter {
         failedNodes: context.executionHistory.filter(h => h.error).length
       }
     };
+
+    // Only log in development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 Persisting execution:', context.executionId);
+    }
 
     await ExecutionHistoryModel.findByIdAndUpdate(
       context.executionId,

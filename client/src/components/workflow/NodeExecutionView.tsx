@@ -21,15 +21,17 @@ interface NodeExecutionData {
   nodeName: string;
   nodeType: string;
   status: 'waiting' | 'running' | 'completed' | 'error' | 'skipped';
-  startTime?: Date;
-  endTime?: Date;
+  startTime?: Date | string;
+  endTime?: Date | string;
   duration?: number;
+  executionTime?: number;
   input?: any;
   output?: any;
   error?: string;
   aiProvider?: string;
   tokensUsed?: number;
   cost?: number;
+  confidence?: number;
 }
 
 interface NodeExecutionViewProps {
@@ -95,20 +97,37 @@ const NodeExecutionItem: React.FC<{
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger asChild>
           <div className="p-3 cursor-pointer hover:bg-white/50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between w-full overflow-hidden">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 {getStatusIcon(execution.status)}
                 {getNodeTypeIcon(execution.nodeType)}
-                <div className="flex flex-col">
-                  <span className="font-medium text-sm">{execution.nodeName}</span>
-                  <span className="text-xs text-muted-foreground">{execution.nodeType}</span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-semibold text-sm text-gray-900 dark:text-white truncate">{execution.nodeName}</span>
+                  <span className="text-xs text-gray-600 dark:text-gray-300 font-medium">{execution.nodeType}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Badge variant={execution.status === 'completed' ? 'default' : 'secondary'} className="text-xs">
+                  {execution.status}
+                </Badge>
                 {execution.duration && (
                   <Badge variant="outline" className="text-xs">
                     {formatDuration(execution.duration)}
                   </Badge>
+                )}
+                {execution.output && execution.status === 'completed' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewOutput(execution.nodeId, execution.output);
+                    }}
+                    className="h-6 px-2 text-xs"
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Output
+                  </Button>
                 )}
                 {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </div>
@@ -119,38 +138,50 @@ const NodeExecutionItem: React.FC<{
         <CollapsibleContent className="border-t">
           <CardContent className="p-3 space-y-3">
             {/* Execution Details */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <span className="font-medium">Status:</span>
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Status:</span>
                 <Badge variant="outline" className="ml-1">
                   {execution.status}
                 </Badge>
               </div>
               {execution.startTime && (
-                <div>
-                  <span className="font-medium">Started:</span>
-                  <span className="ml-1">{execution.startTime.toLocaleTimeString()}</span>
-                </div>
+                  <div>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Started:</span>
+                    <span className="ml-1 text-gray-900 dark:text-white font-mono">{typeof execution.startTime === 'string' ? new Date(execution.startTime).toLocaleTimeString() : execution.startTime?.toLocaleTimeString?.()}</span>
+                  </div>
+              )}
+              {execution.endTime && (
+                  <div>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Ended:</span>
+                    <span className="ml-1 text-gray-900 dark:text-white font-mono">{typeof execution.endTime === 'string' ? new Date(execution.endTime).toLocaleTimeString() : execution.endTime?.toLocaleTimeString?.()}</span>
+                  </div>
+              )}
+              {execution.executionTime && (
+                  <div>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Duration:</span>
+                    <span className="ml-1 text-gray-900 dark:text-white font-mono">{formatDuration(execution.executionTime)}</span>
+                  </div>
               )}
             </div>
 
             {/* AI-specific details */}
             {execution.aiProvider && (
-              <div className="space-y-1 text-xs">
+              <div className="space-y-2 text-xs border border-gray-200 dark:border-gray-700 rounded p-2 bg-gray-50 dark:bg-gray-800">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium">AI Provider:</span>
-                  <Badge variant="secondary">{execution.aiProvider}</Badge>
+                  <span className="font-semibold text-gray-700 dark:text-gray-300">AI Provider:</span>
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">{execution.aiProvider}</Badge>
                 </div>
                 {execution.tokensUsed && (
                   <div className="flex justify-between">
-                    <span>Tokens Used:</span>
-                    <span>{execution.tokensUsed}</span>
+                    <span className="text-gray-600 dark:text-gray-400">Tokens Used:</span>
+                    <span className="text-gray-900 dark:text-white font-mono">{execution.tokensUsed}</span>
                   </div>
                 )}
                 {execution.cost !== undefined && (
                   <div className="flex justify-between">
-                    <span>Cost:</span>
-                    <span>${execution.cost.toFixed(4)}</span>
+                    <span className="text-gray-600 dark:text-gray-400">Cost:</span>
+                    <span className="text-green-600 dark:text-green-400 font-mono">${execution.cost.toFixed(4)}</span>
                   </div>
                 )}
               </div>
@@ -164,31 +195,28 @@ const NodeExecutionItem: React.FC<{
               </div>
             )}
 
-            {/* Input/Output */}
-            {(execution.input || execution.output) && (
-              <div className="flex gap-2">
-                {execution.input && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => onViewOutput(execution.nodeId, execution.input)}
-                  >
-                    <Eye className="h-3 w-3 mr-1" />
-                    Input
-                  </Button>
-                )}
-                {execution.output && (
-                  <Button
-                    size="sm"
-                    variant="outline" 
-                    className="h-7 text-xs"
-                    onClick={() => onViewOutput(execution.nodeId, execution.output)}
-                  >
-                    <Eye className="h-3 w-3 mr-1" />
-                    Output
-                  </Button>
-                )}
+            {/* Output Preview and Button */}
+            {execution.output && (
+              <div className="space-y-2">
+                <Button
+                  size="sm"
+                  variant="outline" 
+                  className="h-7 text-xs w-full"
+                  onClick={() => onViewOutput(execution.nodeId, execution.output)}
+                >
+                  <Eye className="h-3 w-3 mr-1" />
+                  View Full Output
+                </Button>
+                {/* Inline snippet for quick preview */}
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs border">
+                  <div className="text-gray-600 dark:text-gray-400 font-medium mb-1">Preview:</div>
+                  <div className="text-gray-900 dark:text-white break-words max-h-20 overflow-hidden">
+                    {typeof execution.output === 'string' 
+                      ? execution.output.slice(0, 150) + (execution.output.length > 150 ? '...' : '')
+                      : JSON.stringify(execution.output, null, 1).slice(0, 150) + '...'
+                    }
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>
@@ -204,7 +232,7 @@ export const NodeExecutionView: React.FC<NodeExecutionViewProps> = ({
 }) => {
   const completedCount = executions.filter(e => e.status === 'completed').length;
   const totalCount = executions.length;
-  const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const getOverallStatus = () => {
     if (executions.some(e => e.status === 'error')) return 'error';
@@ -224,14 +252,14 @@ export const NodeExecutionView: React.FC<NodeExecutionViewProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Execution Progress</span>
               <Badge 
-                variant={overallStatus === 'error' ? 'destructive' : 
-                        overallStatus === 'completed' ? 'default' : 'secondary'}
+                  variant={overallStatus === 'error' ? 'destructive' : 
+                          overallStatus === 'completed' ? 'default' : 'secondary'}
               >
                 {overallStatus === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
                 {completedCount}/{totalCount} nodes
               </Badge>
             </div>
-            <Progress value={progress} className="h-2" />
+              <Progress value={progress} className="h-2" />
           </div>
         </CardContent>
       </Card>

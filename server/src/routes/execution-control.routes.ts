@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { workflowEngine } from '../engine/workflow-engine';
+import { WorkflowModel } from '../models/workflow.model';
 import { EventBus } from '../engine/event-bus';
 import { authenticate } from '../middleware/auth.middleware';
 import { rateLimit } from '../middleware/rate-limit';
@@ -94,11 +95,24 @@ router.get('/executions/:executionId',
       // Get execution events
       const events = eventBus.getExecutionEvents(executionId);
 
+      // Derive total node count from the workflow if possible
+      let totalNodes = execution.executionHistory.length;
+      try {
+        if (execution && execution.workflowId) {
+          const wf = await WorkflowModel.findById(execution.workflowId);
+          if (wf && Array.isArray(wf.nodes)) {
+            totalNodes = wf.nodes.length;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load workflow for execution progress:', err);
+      }
+
       res.json({
         execution,
         events,
         progress: {
-          totalNodes: execution.executionHistory.length,
+          totalNodes,
           completedNodes: execution.executionHistory.filter(h => !h.error).length,
           failedNodes: execution.executionHistory.filter(h => h.error).length,
           currentStatus: execution.status

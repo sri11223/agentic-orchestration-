@@ -115,14 +115,6 @@ router.get('/:id',
     try {
       const { id } = req.params;
 
-      // Check cache first
-      const cacheKey = `execution:${id}`;
-      const cachedExecution = await cacheService.get(cacheKey);
-      
-      if (cachedExecution) {
-        return res.json(cachedExecution);
-      }
-
       const execution = await ExecutionHistoryModel.findById(id)
         .populate('workflowId', 'name description permissions');
 
@@ -134,12 +126,25 @@ router.get('/:id',
 
       // Check permissions
       const workflow = execution.workflowId as any;
+      const userId = req.user._id || req.user.id || req.user.userId;
+      console.log('🔍 Permission check:', {
+        userId: userId,
+        userObject: req.user,
+        userRole: req.user.role,
+        workflowId: workflow._id,
+        workflowPermissions: workflow.permissions,
+        executionId: id
+      });
+      
       if (req.user.role !== 'admin') {
-        const hasPermission = workflow.permissions.owners.includes(req.user._id) ||
-                            workflow.permissions.editors.includes(req.user._id) ||
-                            workflow.permissions.viewers.includes(req.user._id);
+        const hasPermission = workflow.permissions && (
+          workflow.permissions.owners.includes(userId) ||
+          workflow.permissions.editors.includes(userId) ||
+          workflow.permissions.viewers.includes(userId)
+        );
         
         if (!hasPermission) {
+          console.log('❌ Access denied for user:', userId, 'to workflow:', workflow._id);
           return res.status(403).json({
             error: 'Access denied',
             message: 'You do not have permission to view this execution'
@@ -147,10 +152,19 @@ router.get('/:id',
         }
       }
 
-      // Cache for 5 minutes
-      await cacheService.set(cacheKey, execution, 300);
+      // Disable caching for real-time status updates
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
 
-      res.json(execution);
+      const responseData = {
+        execution: execution,
+        events: (execution as any).events || []
+      };
+      
+      res.json(responseData);
 
     } catch (error) {
       console.error('Get execution error:', error);

@@ -305,10 +305,10 @@ export class PerformanceMonitor extends EventEmitter {
 
     this.emit('alert', alert);
     
-    // Log critical alerts
+    // Log critical alerts only in production, reduce spam
     if (severity === 'critical') {
       console.error(`🚨 CRITICAL PERFORMANCE ALERT: ${message}`);
-    } else {
+    } else if (process.env.NODE_ENV === 'development') {
       console.warn(`⚠️ PERFORMANCE WARNING: ${message}`);
     }
   }

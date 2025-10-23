@@ -87,12 +87,20 @@ const NodeConfigPanel = () => {
           nodeId={selectedNode.id}
           initialData={selectedNode.data.config}
           onSave={(aiConfig) => {
+            console.log('💾 NodeConfigPanel - Received AI config to save:', {
+              nodeId: selectedNode.id,
+              aiConfig,
+              currentConfig: selectedNode.data.config
+            });
+            
             updateNodeData(selectedNode.id, {
               config: {
                 ...selectedNode.data.config,
                 ...aiConfig
               }
             });
+            
+            console.log('✅ NodeConfigPanel - updateNodeData called');
           }}
           onTest={handleAITest}
         />

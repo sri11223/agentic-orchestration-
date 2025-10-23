@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import { connectDatabase } from './database/connection';
+import { MemoryManager } from './utils/memory-manager';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -60,6 +61,10 @@ app.use(cors({
 // Request parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Initialize memory management
+const memoryManager = MemoryManager.getInstance();
+console.log('🧹 Memory management initialized');
 
 // Performance monitoring middleware
 app.use(performanceMiddleware());
