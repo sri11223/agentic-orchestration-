@@ -522,7 +522,8 @@ export class FileOperationsService {
     secretAccessKey: string,
     sessionToken?: string
   ): Promise<FileOperationResult> {
-    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+    const encodedKey = this.encodeS3Key(key);
+    const url = `${baseUrl}/${encodedKey}`;
     const body = typeof operation.fileContent === 'string'
       ? Buffer.from(operation.fileContent)
       : operation.fileContent;
@@ -533,7 +534,7 @@ export class FileOperationsService {
       'content-length': String(body?.length || 0)
     };
 
-    const signed = this.signAwsRequest('PUT', `/${key}`, '', headers, body || Buffer.from(''), region, bucket, accessKeyId, secretAccessKey, sessionToken);
+    const signed = this.signAwsRequest('PUT', `/${encodedKey}`, '', headers, body || Buffer.from(''), region, bucket, accessKeyId, secretAccessKey, sessionToken);
 
     await axios.put(url, body, { headers: signed });
 
@@ -554,9 +555,10 @@ export class FileOperationsService {
     secretAccessKey: string,
     sessionToken?: string
   ): Promise<FileOperationResult> {
-    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+    const encodedKey = this.encodeS3Key(key);
+    const url = `${baseUrl}/${encodedKey}`;
     const headers: Record<string, string> = { host };
-    const signed = this.signAwsRequest('GET', `/${key}`, '', headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
+    const signed = this.signAwsRequest('GET', `/${encodedKey}`, '', headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
 
     const response = await axios.get(url, { headers: signed, responseType: 'arraybuffer' });
     const buffer = Buffer.from(response.data);
@@ -579,9 +581,10 @@ export class FileOperationsService {
     secretAccessKey: string,
     sessionToken?: string
   ): Promise<FileOperationResult> {
-    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+    const encodedKey = this.encodeS3Key(key);
+    const url = `${baseUrl}/${encodedKey}`;
     const headers: Record<string, string> = { host };
-    const signed = this.signAwsRequest('DELETE', `/${key}`, '', headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
+    const signed = this.signAwsRequest('DELETE', `/${encodedKey}`, '', headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
 
     await axios.delete(url, { headers: signed });
 
@@ -628,6 +631,10 @@ export class FileOperationsService {
       success: true,
       files
     };
+  }
+
+  private encodeS3Key(key: string) {
+    return encodeURIComponent(key).replace(/%2F/g, '/');
   }
 
   private signAwsRequest(
