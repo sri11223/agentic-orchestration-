@@ -4,6 +4,7 @@ import { TriggerModel, TriggerExecutionModel, ITriggerConfig } from '../models/t
 import * as cron from 'node-cron';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import { GmailService, GmailConfig, EmailFilter } from './gmail.service';
 
 export class TriggerService {
   private static instance: TriggerService;
@@ -11,9 +12,11 @@ export class TriggerService {
   private activeSchedules: Map<string, any> = new Map();
   private emailPollingIntervals: Map<string, NodeJS.Timeout> = new Map();
   private webhookRegistry: Map<string, ITriggerConfig> = new Map();
+  private gmailService: GmailService;
 
   private constructor() {
     this.eventBus = EventBus.getInstance();
+    this.gmailService = new GmailService();
     this.initializeEventListeners();
     this.startScheduleManager();
     this.startEmailPolling();
@@ -434,24 +437,72 @@ export class TriggerService {
   }
 
   private async checkEmailTrigger(trigger: ITriggerConfig): Promise<void> {
-    // Email checking implementation would go here
-    // This is a placeholder for IMAP/POP3 email checking
-    console.log(`📧 Checking emails for trigger ${(trigger as any)._id}`);
-    
-    // Mock email check - in real implementation, you would:
-    // 1. Connect to IMAP/POP3 server
-    // 2. Check for new emails matching filters
-    // 3. Process each matching email
-    // 4. Execute trigger if conditions are met
+    const triggerId = (trigger as any)._id?.toString();
+    console.log(`📧 Checking emails for trigger ${triggerId}`);
+
+    const gmailConfig = this.resolveGmailConfig(trigger.config);
+    if (!gmailConfig) {
+      throw new Error('Gmail configuration missing for email trigger');
+    }
+
+    await this.gmailService.setUserCredentials(gmailConfig);
+
+    const filter: EmailFilter = {
+      from: trigger.config.senderFilter,
+      subject: trigger.config.subjectFilter,
+      isUnread: true,
+      receivedAfter: trigger.config.lastChecked ? new Date(trigger.config.lastChecked) : undefined
+    };
+
+    const emails = await this.gmailService.fetchRecentEmails(filter, 10);
+
+    for (const email of emails) {
+      if (trigger.config.markAsRead) {
+        await this.gmailService.markAsRead(email.id);
+      }
+
+      await this.executeTrigger(trigger, {
+        triggerType: 'email',
+        email: {
+          id: email.id,
+          from: email.from,
+          to: email.to,
+          subject: email.subject,
+          body: email.body,
+          timestamp: email.timestamp,
+          attachments: email.attachments
+        }
+      });
+    }
+
+    trigger.config.lastChecked = new Date().toISOString();
+    await TriggerModel.findByIdAndUpdate(triggerId, { config: trigger.config });
   }
 
   private async testEmailTrigger(trigger: ITriggerConfig): Promise<{ success: boolean; message: string }> {
     // Test email configuration
     try {
-      // This would test IMAP connection in real implementation
+      const gmailConfig = this.resolveGmailConfig(trigger.config);
+      if (!gmailConfig) {
+        return {
+          success: false,
+          message: 'Missing Gmail configuration for email trigger'
+        };
+      }
+
+      await this.gmailService.setUserCredentials(gmailConfig);
+      const result = await this.gmailService.testConnection();
+
+      if (result.status !== 'connected') {
+        return {
+          success: false,
+          message: `Gmail connection status: ${result.status}`
+        };
+      }
+
       return {
         success: true,
-        message: `Email trigger configuration valid for ${trigger.config.emailAddress}`
+        message: `Email trigger configuration valid for ${result.userEmail || trigger.config.emailAddress}`
       };
     } catch (error) {
       return {
@@ -459,6 +510,26 @@ export class TriggerService {
         message: `Email connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
     }
+  }
+
+  private resolveGmailConfig(config: any): GmailConfig | null {
+    const clientId = config?.gmail?.clientId || process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = config?.gmail?.clientSecret || process.env.GOOGLE_CLIENT_SECRET;
+    const refreshToken = config?.gmail?.refreshToken || process.env.GMAIL_REFRESH_TOKEN;
+    const accessToken = config?.gmail?.accessToken || process.env.GMAIL_ACCESS_TOKEN;
+    const userEmail = config?.gmail?.userEmail || process.env.GMAIL_USER_EMAIL;
+
+    if (!clientId || !clientSecret || !refreshToken || !userEmail) {
+      return null;
+    }
+
+    return {
+      clientId,
+      clientSecret,
+      refreshToken,
+      accessToken,
+      userEmail
+    };
   }
 
   private async testWebhookTrigger(trigger: ITriggerConfig): Promise<{ success: boolean; message: string; data?: any }> {
@@ -499,8 +570,18 @@ export class TriggerService {
         const expectedToken = `${trigger.config.tokenPrefix || 'Bearer'} ${trigger.config.secretKey}`;
         return auth === expectedToken;
       case 'basic':
-        // Implement basic auth validation
-        return true; // Placeholder
+        {
+          const authHeader = headers.authorization || headers.Authorization;
+          if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Basic ')) {
+            return false;
+          }
+          const encoded = authHeader.replace('Basic ', '');
+          const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+          const [username, password] = decoded.split(':');
+          const expectedUser = trigger.config.basicUsername || trigger.config.username;
+          const expectedPass = trigger.config.basicPassword || trigger.config.password;
+          return Boolean(expectedUser && expectedPass && username === expectedUser && password === expectedPass);
+        }
       default:
         return true;
     }
@@ -531,9 +612,135 @@ export class TriggerService {
 
   private calculateNextExecution(config: any): Date {
     const now = new Date();
-    // Implementation would calculate based on schedule type
-    // Returning next hour as placeholder
-    return new Date(now.getTime() + 60 * 60 * 1000);
+
+    switch (config.scheduleType) {
+      case 'interval': {
+        const value = Math.max(1, Number(config.intervalValue || 1));
+        const unit = config.intervalUnit || 'minutes';
+        const multipliers: Record<string, number> = {
+          seconds: 1000,
+          minutes: 60 * 1000,
+          hours: 60 * 60 * 1000,
+          days: 24 * 60 * 60 * 1000
+        };
+        return new Date(now.getTime() + value * (multipliers[unit] || multipliers.minutes));
+      }
+      case 'daily': {
+        const [hour, minute] = (config.dailyTime || '09:00').split(':').map(Number);
+        const next = new Date(now);
+        next.setHours(hour, minute, 0, 0);
+        if (next <= now) {
+          next.setDate(next.getDate() + 1);
+        }
+        return next;
+      }
+      case 'weekly': {
+        const [hour, minute] = (config.weeklyTime || '09:00').split(':').map(Number);
+        const targetDay = this.dayNameToNumber(config.weekDay || 'monday');
+        const next = new Date(now);
+        next.setHours(hour, minute, 0, 0);
+        const currentDay = next.getDay();
+        let delta = targetDay - currentDay;
+        if (delta < 0 || (delta === 0 && next <= now)) {
+          delta += 7;
+        }
+        next.setDate(next.getDate() + delta);
+        return next;
+      }
+      case 'monthly': {
+        const [hour, minute] = (config.monthlyTime || '09:00').split(':').map(Number);
+        const day = Math.max(1, Math.min(31, Number(config.monthDay || 1)));
+        const next = new Date(now);
+        next.setHours(hour, minute, 0, 0);
+        const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+        next.setDate(Math.min(day, maxDay));
+        if (next <= now) {
+          const future = new Date(next.getFullYear(), next.getMonth() + 1, 1);
+          const futureMax = new Date(future.getFullYear(), future.getMonth() + 1, 0).getDate();
+          future.setDate(Math.min(day, futureMax));
+          future.setHours(hour, minute, 0, 0);
+          return future;
+        }
+        return next;
+      }
+      case 'cron': {
+        const expression = config.cronExpression || '0 */30 * * * *';
+        return this.calculateNextCronExecution(expression, now);
+      }
+      default:
+        return new Date(now.getTime() + 60 * 60 * 1000);
+    }
+  }
+
+  private calculateNextCronExecution(expression: string, fromDate: Date): Date {
+    const parts = expression.trim().split(/\s+/);
+    const hasSeconds = parts.length === 6;
+    if (parts.length < 5 || parts.length > 6) {
+      throw new Error('Cron expression must have 5 or 6 fields');
+    }
+
+    const [secField, minField, hourField, dayField, monthField, weekField] = hasSeconds
+      ? parts
+      : ['0', parts[0], parts[1], parts[2], parts[3], parts[4]];
+
+    const next = new Date(fromDate.getTime() + 1000);
+    const end = new Date(fromDate.getTime() + 31 * 24 * 60 * 60 * 1000);
+    const stepMs = hasSeconds ? 1000 : 60 * 1000;
+
+    while (next <= end) {
+      const second = next.getSeconds();
+      const minute = next.getMinutes();
+      const hour = next.getHours();
+      const day = next.getDate();
+      const month = next.getMonth() + 1;
+      const weekday = next.getDay();
+
+      if (
+        this.matchesCronField(secField, second, 0, 59) &&
+        this.matchesCronField(minField, minute, 0, 59) &&
+        this.matchesCronField(hourField, hour, 0, 23) &&
+        this.matchesCronField(dayField, day, 1, 31) &&
+        this.matchesCronField(monthField, month, 1, 12) &&
+        this.matchesCronField(weekField, weekday, 0, 6)
+      ) {
+        return new Date(next);
+      }
+
+      next.setTime(next.getTime() + stepMs);
+    }
+
+    throw new Error('No future execution found for cron expression in next 31 days');
+  }
+
+  private matchesCronField(field: string, value: number, min: number, max: number): boolean {
+    if (field === '*') {
+      return true;
+    }
+
+    return field.split(',').some(part => {
+      if (part.includes('/')) {
+        const [rangePart, stepPart] = part.split('/');
+        const step = Number(stepPart);
+        const [rangeStart, rangeEnd] = rangePart === '*'
+          ? [min, max]
+          : rangePart.split('-').map(Number);
+        if (Number.isNaN(step) || step <= 0) {
+          return false;
+        }
+        const start = rangeStart ?? min;
+        const end = rangeEnd ?? max;
+        if (value < start || value > end) return false;
+        return (value - start) % step === 0;
+      }
+
+      if (part.includes('-')) {
+        const [start, end] = part.split('-').map(Number);
+        return value >= start && value <= end;
+      }
+
+      const num = Number(part);
+      return value === num;
+    });
   }
 
   private initializeEventListeners(): void {

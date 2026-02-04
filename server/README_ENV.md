@@ -10,6 +10,10 @@ Steps to set up your local environment variables safely:
 
 2. Open `.env` and fill in real keys for providers you plan to use (e.g., `GOOGLE_AI_API_KEY`, `GROQ_API_KEY`, `HUGGINGFACE_API_KEY`). Do not commit `.env` to source control.
 
+   Optional integrations:
+   - Gmail triggers (email polling): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_USER_EMAIL` (optional `GMAIL_ACCESS_TOKEN`)
+   - AWS S3 file operations: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET` (optional `AWS_SESSION_TOKEN`)
+
 3. Ensure `.env` is included in your `.gitignore` (it should be by default in many templates):
 
    # Add this line to your .gitignore if it's not present

@@ -397,25 +397,47 @@ export class EmailNotificationService {
    * Get email analytics
    */
   getAnalytics(timeRange?: { start: Date; end: Date }): EmailAnalytics {
-    // This would integrate with your analytics database
-    // For now, return mock data
+    const entries = Array.from(this.emailStats.values()).filter(entry => {
+      if (!timeRange) return true;
+      const sentAt = new Date(entry.sentAt);
+      return sentAt >= timeRange.start && sentAt <= timeRange.end;
+    });
+
+    const totalSent = entries.length;
+    const totalDelivered = entries.filter(entry => entry.status === 'sent').length;
+    const totalFailed = entries.filter(entry => entry.status === 'failed').length;
+
+    const templateCounts = entries.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.templateId] = (acc[entry.templateId] || 0) + 1;
+      return acc;
+    }, {});
+
+    const timeStats = entries.reduce<Record<string, number>>((acc, entry) => {
+      const date = new Date(entry.sentAt);
+      const hourLabel = `${String(date.getHours()).padStart(2, '0')}:00`;
+      acc[hourLabel] = (acc[hourLabel] || 0) + 1;
+      return acc;
+    }, {});
+
+    const topTemplates = Object.entries(templateCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([templateId, sent]) => ({
+        templateId,
+        name: this.templates.get(templateId)?.name || templateId,
+        sent,
+        openRate: 0
+      }));
+
     return {
-      totalSent: 1000,
-      deliveryRate: 0.98,
-      openRate: 0.25,
-      clickRate: 0.05,
-      bounceRate: 0.02,
-      unsubscribeRate: 0.001,
-      topTemplates: [
-        { templateId: 'welcome', name: 'Welcome Email', sent: 500, openRate: 0.35 },
-        { templateId: 'reminder', name: 'Task Reminder', sent: 300, openRate: 0.28 }
-      ],
-      timeStats: {
-        '09:00': 150,
-        '10:00': 200,
-        '14:00': 175,
-        '16:00': 125
-      }
+      totalSent,
+      deliveryRate: totalSent > 0 ? totalDelivered / totalSent : 0,
+      openRate: 0,
+      clickRate: 0,
+      bounceRate: totalSent > 0 ? totalFailed / totalSent : 0,
+      unsubscribeRate: 0,
+      topTemplates,
+      timeStats
     };
   }
 
