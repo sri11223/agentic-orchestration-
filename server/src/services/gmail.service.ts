@@ -19,6 +19,7 @@ export interface EmailMessage {
   subject: string;
   body: string;
   isHtml?: boolean;
+  headers?: Record<string, string>;
   attachments?: Array<{
     filename: string;
     content: Buffer | string;
@@ -32,6 +33,7 @@ export interface EmailFilter {
   bodyContains?: string;
   hasAttachment?: boolean;
   isUnread?: boolean;
+  receivedAfter?: Date;
 }
 
 export interface ParsedEmail {
@@ -131,6 +133,7 @@ export class GmailService {
         subject: message.subject,
         text: message.isHtml ? undefined : message.body,
         html: message.isHtml ? message.body : undefined,
+        headers: message.headers,
         attachments: message.attachments,
       };
 
@@ -246,8 +249,38 @@ export class GmailService {
     if (filter.bodyContains) queryParts.push(`"${filter.bodyContains}"`);
     if (filter.hasAttachment) queryParts.push('has:attachment');
     if (filter.isUnread) queryParts.push('is:unread');
+    if (filter.receivedAfter) {
+      const timestamp = Math.floor(filter.receivedAfter.getTime() / 1000);
+      queryParts.push(`after:${timestamp}`);
+    }
 
     return queryParts.join(' ');
+  }
+
+  /**
+   * Fetch recent emails matching filter
+   */
+  async fetchRecentEmails(filter: EmailFilter, maxResults: number = 10): Promise<ParsedEmail[]> {
+    if (!this.gmail) {
+      throw new Error('Gmail service not initialized');
+    }
+
+    const query = this.buildGmailQuery(filter);
+    const response = await this.gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults,
+    });
+
+    const emails: ParsedEmail[] = [];
+    if (response.data.messages) {
+      for (const message of response.data.messages) {
+        const parsed = await this.parseEmail(message.id);
+        emails.push(parsed);
+      }
+    }
+
+    return emails;
   }
 
   /**

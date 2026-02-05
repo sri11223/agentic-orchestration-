@@ -21,6 +21,12 @@ npm install
 npm run dev
 ```
 
+### API Configuration
+By default the app expects the backend at `http://localhost:3000`. Override with:
+```bash
+echo "VITE_API_BASE_URL=http://localhost:3000" > .env.local
+```
+
 3. Build for production:
 ```bash
 npm run build
