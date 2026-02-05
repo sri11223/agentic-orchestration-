@@ -19,6 +19,7 @@ export interface EmailMessage {
   subject: string;
   body: string;
   isHtml?: boolean;
+  headers?: Record<string, string>;
   attachments?: Array<{
     filename: string;
     content: Buffer | string;
@@ -132,6 +133,7 @@ export class GmailService {
         subject: message.subject,
         text: message.isHtml ? undefined : message.body,
         html: message.isHtml ? message.body : undefined,
+        headers: message.headers,
         attachments: message.attachments,
       };
 

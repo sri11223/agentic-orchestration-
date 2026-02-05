@@ -5,6 +5,7 @@ import * as cron from 'node-cron';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { GmailService, GmailConfig, EmailFilter } from './gmail.service';
+import { EmailInboundService, EmailInboundConfig } from './email-inbound.service';
 
 export class TriggerService {
   private static instance: TriggerService;
@@ -13,10 +14,12 @@ export class TriggerService {
   private emailPollingIntervals: Map<string, NodeJS.Timeout> = new Map();
   private webhookRegistry: Map<string, ITriggerConfig> = new Map();
   private gmailService: GmailService;
+  private emailInboundService: EmailInboundService;
 
   private constructor() {
     this.eventBus = EventBus.getInstance();
     this.gmailService = new GmailService();
+    this.emailInboundService = new EmailInboundService();
     this.initializeEventListeners();
     this.startScheduleManager();
     this.startEmailPolling();
@@ -440,13 +443,6 @@ export class TriggerService {
     const triggerId = (trigger as any)._id?.toString();
     console.log(`📧 Checking emails for trigger ${triggerId}`);
 
-    const gmailConfig = this.resolveGmailConfig(trigger.config);
-    if (!gmailConfig) {
-      throw new Error('Gmail configuration missing for email trigger');
-    }
-
-    await this.gmailService.setUserCredentials(gmailConfig);
-
     const filter: EmailFilter = {
       from: trigger.config.senderFilter,
       subject: trigger.config.subjectFilter,
@@ -454,10 +450,21 @@ export class TriggerService {
       receivedAfter: trigger.config.lastChecked ? new Date(trigger.config.lastChecked) : undefined
     };
 
-    const emails = await this.gmailService.fetchRecentEmails(filter, 10);
+    const gmailConfig = this.resolveGmailConfig(trigger.config);
+    const inboundConfig = this.resolveInboundConfig(trigger.config);
+
+    let emails;
+    if (gmailConfig) {
+      await this.gmailService.setUserCredentials(gmailConfig);
+      emails = await this.gmailService.fetchRecentEmails(filter, 10);
+    } else if (inboundConfig) {
+      emails = await this.emailInboundService.fetchRecentEmails(inboundConfig, filter, 10, trigger.config.markAsRead);
+    } else {
+      throw new Error('Email trigger configuration missing (Gmail or IMAP/POP3)');
+    }
 
     for (const email of emails) {
-      if (trigger.config.markAsRead) {
+      if (trigger.config.markAsRead && gmailConfig) {
         await this.gmailService.markAsRead(email.id);
       }
 
@@ -483,26 +490,43 @@ export class TriggerService {
     // Test email configuration
     try {
       const gmailConfig = this.resolveGmailConfig(trigger.config);
-      if (!gmailConfig) {
+      const inboundConfig = this.resolveInboundConfig(trigger.config);
+
+      if (gmailConfig) {
+        await this.gmailService.setUserCredentials(gmailConfig);
+        const result = await this.gmailService.testConnection();
+
+        if (result.status !== 'connected') {
+          return {
+            success: false,
+            message: `Gmail connection status: ${result.status}`
+          };
+        }
+
         return {
-          success: false,
-          message: 'Missing Gmail configuration for email trigger'
+          success: true,
+          message: `Email trigger configuration valid for ${result.userEmail || trigger.config.emailAddress}`
         };
       }
 
-      await this.gmailService.setUserCredentials(gmailConfig);
-      const result = await this.gmailService.testConnection();
+      if (inboundConfig) {
+        const result = await this.emailInboundService.testConnection(inboundConfig);
+        if (result.status !== 'connected') {
+          return {
+            success: false,
+            message: `Inbound email connection status: ${result.status} ${result.message ? `(${result.message})` : ''}`
+          };
+        }
 
-      if (result.status !== 'connected') {
         return {
-          success: false,
-          message: `Gmail connection status: ${result.status}`
+          success: true,
+          message: `Email trigger configuration valid for ${trigger.config.emailAddress}`
         };
       }
 
       return {
-        success: true,
-        message: `Email trigger configuration valid for ${result.userEmail || trigger.config.emailAddress}`
+        success: false,
+        message: 'Missing email configuration (Gmail or IMAP/POP3) for email trigger'
       };
     } catch (error) {
       return {
@@ -530,6 +554,34 @@ export class TriggerService {
       accessToken,
       userEmail
     };
+  }
+
+  private resolveInboundConfig(config: any): EmailInboundConfig | null {
+    const imapConfig = config?.imapConfig;
+    if (imapConfig?.host && imapConfig?.port && imapConfig?.username && imapConfig?.password) {
+      return {
+        type: 'imap',
+        host: imapConfig.host,
+        port: imapConfig.port,
+        secure: Boolean(imapConfig.secure),
+        username: imapConfig.username,
+        password: imapConfig.password
+      };
+    }
+
+    const pop3Config = config?.pop3Config;
+    if (pop3Config?.host && pop3Config?.port && pop3Config?.username && pop3Config?.password) {
+      return {
+        type: 'pop3',
+        host: pop3Config.host,
+        port: pop3Config.port,
+        secure: Boolean(pop3Config.secure),
+        username: pop3Config.username,
+        password: pop3Config.password
+      };
+    }
+
+    return null;
   }
 
   private async testWebhookTrigger(trigger: ITriggerConfig): Promise<{ success: boolean; message: string; data?: any }> {

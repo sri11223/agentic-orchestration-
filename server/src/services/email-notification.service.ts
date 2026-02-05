@@ -1,5 +1,8 @@
+import { v4 as uuidv4 } from 'uuid';
 import { GmailService, EmailMessage } from './gmail.service';
 import { EventBus } from '../engine/event-bus';
+import { EmailEventModel } from '../models/email-event.model';
+import { EmailUnsubscribeModel } from '../models/email-unsubscribe.model';
 
 export interface EmailTemplate {
   id: string;
@@ -138,7 +141,8 @@ export class EmailNotificationService {
   async sendTemplatedEmail(
     templateId: string,
     recipient: EmailRecipient,
-    customVariables?: Record<string, any>
+    customVariables?: Record<string, any>,
+    options?: { campaignId?: string }
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       const template = this.templates.get(templateId);
@@ -148,6 +152,10 @@ export class EmailNotificationService {
 
       if (!template.isActive) {
         throw new Error(`Template ${templateId} is not active`);
+      }
+
+      if (await this.isUnsubscribed(recipient.email, templateId)) {
+        throw new Error(`Recipient ${recipient.email} is unsubscribed`);
       }
 
       // Merge variables
@@ -162,21 +170,34 @@ export class EmailNotificationService {
 
       // Process template
       const processedSubject = this.processTemplate(template.subject, variables);
-      const processedHtmlBody = this.processTemplate(template.htmlBody, variables);
+      let processedHtmlBody = this.processTemplate(template.htmlBody, variables);
       const processedTextBody = template.textBody ? this.processTemplate(template.textBody, variables) : undefined;
+
+      const trackingId = uuidv4();
+      processedHtmlBody = this.applyTracking(processedHtmlBody, {
+        templateId,
+        campaignId: options?.campaignId,
+        recipient: recipient.email,
+        trackingId
+      });
 
       // Send email
       const emailMessage: EmailMessage = {
         to: recipient.email,
         subject: processedSubject,
         body: processedHtmlBody,
-        isHtml: true
+        isHtml: true,
+        headers: {
+          'X-Tracking-Id': trackingId,
+          'X-Template-Id': templateId,
+          ...(options?.campaignId ? { 'X-Campaign-Id': options.campaignId } : {})
+        }
       };
 
       const result = await this.gmailService.sendEmail(emailMessage);
 
       // Track email
-      this.trackEmailSent(templateId, recipient.email, result.messageId);
+      await this.trackEmailSent(templateId, recipient.email, result.messageId, options?.campaignId, trackingId);
 
       return {
         success: true,
@@ -184,7 +205,7 @@ export class EmailNotificationService {
       };
 
     } catch (error) {
-      this.trackEmailFailed(templateId, recipient.email, error instanceof Error ? error.message : String(error));
+      await this.trackEmailFailed(templateId, recipient.email, error instanceof Error ? error.message : String(error), options?.campaignId);
       
       return {
         success: false,
@@ -218,7 +239,7 @@ export class EmailNotificationService {
       const batch = recipients.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (recipient) => {
-        const result = await this.sendTemplatedEmail(templateId, recipient, globalVariables);
+        const result = await this.sendTemplatedEmail(templateId, recipient, globalVariables, { campaignId: campaign.id });
         
         if (result.success) {
           sent++;
@@ -396,46 +417,76 @@ export class EmailNotificationService {
   /**
    * Get email analytics
    */
-  getAnalytics(timeRange?: { start: Date; end: Date }): EmailAnalytics {
-    const entries = Array.from(this.emailStats.values()).filter(entry => {
-      if (!timeRange) return true;
-      const sentAt = new Date(entry.sentAt);
-      return sentAt >= timeRange.start && sentAt <= timeRange.end;
-    });
+  async getAnalytics(timeRange?: { start: Date; end: Date }): Promise<EmailAnalytics> {
+    const match: Record<string, any> = {};
+    if (timeRange?.start || timeRange?.end) {
+      match.occurredAt = {};
+      if (timeRange.start) match.occurredAt.$gte = timeRange.start;
+      if (timeRange.end) match.occurredAt.$lte = timeRange.end;
+    }
 
-    const totalSent = entries.length;
-    const totalDelivered = entries.filter(entry => entry.status === 'sent').length;
-    const totalFailed = entries.filter(entry => entry.status === 'failed').length;
+    const [eventCounts, templateCounts, hourlyCounts] = await Promise.all([
+      EmailEventModel.aggregate([
+        { $match: match },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      EmailEventModel.aggregate([
+        { $match: { ...match, templateId: { $ne: null } } },
+        {
+          $group: {
+            _id: '$templateId',
+            sent: { $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] } },
+            opened: { $sum: { $cond: [{ $eq: ['$status', 'opened'] }, 1, 0] } }
+          }
+        },
+        { $sort: { sent: -1 } },
+        { $limit: 5 }
+      ]),
+      EmailEventModel.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%H:00', date: '$occurredAt' } },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+    ]);
 
-    const templateCounts = entries.reduce<Record<string, number>>((acc, entry) => {
-      acc[entry.templateId] = (acc[entry.templateId] || 0) + 1;
+    const counts = eventCounts.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry._id] = entry.count;
       return acc;
     }, {});
 
-    const timeStats = entries.reduce<Record<string, number>>((acc, entry) => {
-      const date = new Date(entry.sentAt);
-      const hourLabel = `${String(date.getHours()).padStart(2, '0')}:00`;
-      acc[hourLabel] = (acc[hourLabel] || 0) + 1;
+    const totalSent = counts.sent || 0;
+    const totalDelivered = counts.delivered || 0;
+    const totalFailed = counts.failed || 0;
+    const totalOpened = counts.opened || 0;
+    const totalClicked = counts.clicked || 0;
+    const totalUnsubscribed = counts.unsubscribed || 0;
+
+    const timeStats = hourlyCounts.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry._id] = entry.count;
       return acc;
     }, {});
 
-    const topTemplates = Object.entries(templateCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([templateId, sent]) => ({
-        templateId,
-        name: this.templates.get(templateId)?.name || templateId,
-        sent,
-        openRate: 0
-      }));
+    const topTemplates = templateCounts.map(entry => ({
+      templateId: entry._id,
+      name: this.templates.get(entry._id)?.name || entry._id,
+      sent: entry.sent,
+      openRate: entry.sent > 0 ? entry.opened / entry.sent : 0
+    }));
+
+    const totalDeliveredOrSent = totalDelivered || totalSent;
 
     return {
       totalSent,
-      deliveryRate: totalSent > 0 ? totalDelivered / totalSent : 0,
-      openRate: 0,
-      clickRate: 0,
+      deliveryRate: totalSent > 0 ? totalDeliveredOrSent / totalSent : 0,
+      openRate: totalDeliveredOrSent > 0 ? totalOpened / totalDeliveredOrSent : 0,
+      clickRate: totalDeliveredOrSent > 0 ? totalClicked / totalDeliveredOrSent : 0,
       bounceRate: totalSent > 0 ? totalFailed / totalSent : 0,
-      unsubscribeRate: 0,
+      unsubscribeRate: totalDeliveredOrSent > 0 ? totalUnsubscribed / totalDeliveredOrSent : 0,
       topTemplates,
       timeStats
     };
@@ -488,6 +539,46 @@ export class EmailNotificationService {
     return campaign;
   }
 
+  private buildTrackingBaseUrl(): string {
+    const baseUrl = process.env.EMAIL_TRACKING_BASE_URL || process.env.BASE_URL || 'http://localhost:3001';
+    return baseUrl.replace(/\/$/, '');
+  }
+
+  private applyTracking(
+    html: string,
+    data: { templateId: string; campaignId?: string; recipient: string; trackingId: string }
+  ): string {
+    if (!html) return html;
+
+    const baseUrl = this.buildTrackingBaseUrl();
+    const params = new URLSearchParams({
+      templateId: data.templateId,
+      recipient: data.recipient,
+      trackingId: data.trackingId,
+      ...(data.campaignId ? { campaignId: data.campaignId } : {})
+    });
+
+    const openPixel = `<img src=\"${baseUrl}/api/webhooks/email/open?${params.toString()}\" alt=\"\" width=\"1\" height=\"1\" style=\"display:none;\" />`;
+
+    const withPixel = html.includes('</body>')
+      ? html.replace('</body>', `${openPixel}</body>`)
+      : `${html}${openPixel}`;
+
+    return withPixel.replace(/href=\"([^\"]+)\"/gi, (match, url) => {
+      if (!url || url.startsWith('mailto:') || url.startsWith('#')) {
+        return match;
+      }
+      if (url.includes('/api/webhooks/email/click')) {
+        return match;
+      }
+      if (!/^https?:\/\//i.test(url)) {
+        return match;
+      }
+      const clickUrl = `${baseUrl}/api/webhooks/email/click?${params.toString()}&url=${encodeURIComponent(url)}`;
+      return `href=\"${clickUrl}\"`;
+    });
+  }
+
   private processTemplate(template: string, variables: Record<string, any>): string {
     let processed = template;
     
@@ -526,26 +617,98 @@ export class EmailNotificationService {
     return null;
   }
 
-  private trackEmailSent(templateId: string, email: string, messageId?: string): void {
+  private async trackEmailSent(
+    templateId: string,
+    email: string,
+    messageId?: string,
+    campaignId?: string,
+    trackingId?: string
+  ): Promise<void> {
     const key = `${templateId}:${email}`;
     this.emailStats.set(key, {
       templateId,
       email,
       messageId,
+      campaignId,
+      trackingId,
       sentAt: new Date(),
       status: 'sent'
     });
+
+    await EmailEventModel.create({
+      templateId,
+      campaignId,
+      recipient: email,
+      messageId,
+      metadata: trackingId ? { trackingId } : {},
+      status: 'sent',
+      occurredAt: new Date()
+    });
   }
 
-  private trackEmailFailed(templateId: string, email: string, error: string): void {
+  private async trackEmailFailed(
+    templateId: string,
+    email: string,
+    error: string,
+    campaignId?: string
+  ): Promise<void> {
     const key = `${templateId}:${email}`;
     this.emailStats.set(key, {
       templateId,
       email,
       error,
+      campaignId,
       sentAt: new Date(),
       status: 'failed'
     });
+
+    await EmailEventModel.create({
+      templateId,
+      campaignId,
+      recipient: email,
+      status: 'failed',
+      error,
+      occurredAt: new Date()
+    });
+  }
+
+  async trackEvent(
+    event: 'delivered' | 'opened' | 'clicked' | 'unsubscribed' | 'bounced',
+    payload: { templateId?: string; campaignId?: string; recipient: string; messageId?: string; metadata?: Record<string, any> }
+  ): Promise<void> {
+    await EmailEventModel.create({
+      templateId: payload.templateId,
+      campaignId: payload.campaignId,
+      recipient: payload.recipient,
+      messageId: payload.messageId,
+      status: event,
+      metadata: payload.metadata || {},
+      occurredAt: new Date()
+    });
+
+    if (event === 'unsubscribed') {
+      await EmailUnsubscribeModel.updateOne(
+        { email: payload.recipient, templateId: payload.templateId },
+        {
+          $set: {
+            email: payload.recipient,
+            templateId: payload.templateId,
+            campaignId: payload.campaignId,
+            reason: payload.metadata?.reason,
+            unsubscribedAt: new Date()
+          }
+        },
+        { upsert: true }
+      );
+    }
+  }
+
+  async isUnsubscribed(email: string, templateId?: string): Promise<boolean> {
+    const record = await EmailUnsubscribeModel.findOne({
+      email,
+      ...(templateId ? { templateId } : {})
+    }).lean();
+    return Boolean(record);
   }
 
   private initializeDefaultTemplates(): void {

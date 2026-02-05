@@ -4,6 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { Readable } from 'stream';
 import FormData from 'form-data';
 import crypto from 'crypto';
+import { XMLParser } from 'fast-xml-parser';
 
 export interface FileProvider {
   type: 'google_drive' | 'dropbox' | 'onedrive' | 'aws_s3';
@@ -608,21 +609,19 @@ export class FileOperationsService {
 
     const response = await axios.get(url, { headers: signed });
     const xml = response.data as string;
+    const parser = new XMLParser({ ignoreAttributes: false });
+    const parsed = parser.parse(xml);
+    const contents = parsed?.ListBucketResult?.Contents;
+    const items = Array.isArray(contents) ? contents : contents ? [contents] : [];
 
-    const files = Array.from(xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)).map(match => {
-      const chunk = match[1];
-      const keyMatch = chunk.match(/<Key>([^<]+)<\/Key>/);
-      const sizeMatch = chunk.match(/<Size>([^<]+)<\/Size>/);
-      const modMatch = chunk.match(/<LastModified>([^<]+)<\/LastModified>/);
-      return {
-        id: keyMatch?.[1] || '',
-        name: keyMatch?.[1] || '',
-        size: sizeMatch ? Number(sizeMatch[1]) : 0,
-        mimeType: 'application/octet-stream',
-        modifiedTime: modMatch?.[1] || '',
-        webViewLink: `${baseUrl}/${keyMatch?.[1] || ''}`
-      };
-    });
+    const files = items.map(item => ({
+      id: item.Key || '',
+      name: item.Key || '',
+      size: item.Size ? Number(item.Size) : 0,
+      mimeType: 'application/octet-stream',
+      modifiedTime: item.LastModified || '',
+      webViewLink: `${baseUrl}/${item.Key || ''}`
+    }));
 
     return {
       success: true,
