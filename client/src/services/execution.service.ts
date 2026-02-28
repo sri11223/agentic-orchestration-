@@ -1,4 +1,5 @@
 import { authService } from './auth.service';
+import { API_URL } from '@/config/api';
 
 export interface ExecutionRequest {
   workflowId: string;
@@ -28,7 +29,7 @@ export interface ExecutionEvent {
 }
 
 class WorkflowExecutionService {
-  private baseUrl = 'http://localhost:5000/api';
+  private baseUrl = API_URL;
 
   private async request(endpoint: string, options: RequestInit = {}) {
     try {

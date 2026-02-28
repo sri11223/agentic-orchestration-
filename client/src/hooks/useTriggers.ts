@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authService } from '../services/auth.service';
+import { API_URL } from '@/config/api';
 
 export interface TriggerConfig {
   _id?: string;
@@ -51,10 +52,16 @@ export interface TriggerStats {
 }
 
 class TriggerService {
-  private baseURL = 'http://localhost:5000/api';
+  private baseURL = API_URL;
 
   private async request(endpoint: string, options: RequestInit = {}) {
-    const token = authService.getToken();
+    let token: string | null = null;
+    try {
+      token = await authService.getValidToken();
+    } catch (error) {
+      console.warn('⚠️ Trigger request missing valid token:', error);
+      token = authService.getToken();
+    }
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...options,
       headers: {

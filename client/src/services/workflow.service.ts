@@ -1,6 +1,5 @@
 import { authService } from './auth.service';
-
-const API_BASE_URL = 'http://localhost:5000';
+import { API_URL } from '@/config/api';
 
 export interface WorkflowNode {
   id: string;
@@ -109,7 +108,7 @@ class WorkflowService {
     if (params?.category) queryParams.append('category', params.category);
     if (params?.search) queryParams.append('search', params.search);
 
-    const url = `${API_BASE_URL}/api/workflows${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const url = `${API_URL}/workflows${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     
     try {
       const headers = await this.getAuthHeaders();
@@ -147,7 +146,7 @@ class WorkflowService {
     
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/workflows`, {
+      const response = await fetch(`${API_URL}/workflows`, {
         method: 'POST',
         headers,
         body: JSON.stringify(workflowData),
@@ -179,7 +178,7 @@ class WorkflowService {
     
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
+      const response = await fetch(`${API_URL}/workflows/${id}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(workflowData),
@@ -204,7 +203,7 @@ class WorkflowService {
     
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
+      const response = await fetch(`${API_URL}/workflows/${id}`, {
         method: 'GET',
         headers,
       });
@@ -235,7 +234,7 @@ class WorkflowService {
     
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/workflows/${id}`, {
+      const response = await fetch(`${API_URL}/workflows/${id}`, {
         method: 'DELETE',
         headers,
       });
@@ -257,7 +256,7 @@ class WorkflowService {
     
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/execution/workflows/${id}/execute`, {
+      const response = await fetch(`${API_URL}/workflows/${id}/execute`, {
         method: 'POST',
         headers,
         body: JSON.stringify(executionData || {}),
@@ -283,7 +282,7 @@ class WorkflowService {
     
     try {
       const headers = await this.getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/api/ai/test`, {
+      const response = await fetch(`${API_URL}/ai/test`, {
         method: 'POST',
         headers,
         body: JSON.stringify(nodeConfig),

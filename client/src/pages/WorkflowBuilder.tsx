@@ -21,10 +21,12 @@ import NodePalette from '@/components/workflow/NodePalette';
 import NodeConfigPanel from '@/components/workflow/NodeConfigPanel';
 import WorkflowNavbar from '@/components/workflow/WorkflowNavbar';
 import { ExecutionPanel } from '@/components/workflow/ExecutionPanel';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { demoWorkflow } from '@/data/demoWorkflow';
 import { workflowService } from '@/services/workflow.service';
 import { useAutoSave } from '@/hooks/useAutoSave';
+import { executionService } from '@/services/execution.service';
+import { useToast } from '@/hooks/use-toast';
 
 // Map backend node types to frontend node types
 const mapBackendToFrontendNodeType = (backendType: string): string => {
@@ -85,6 +87,8 @@ const edgeTypes = {
 
 const WorkflowBuilderContent = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const reactFlowInstance = useReactFlow();
@@ -129,6 +133,14 @@ const WorkflowBuilderContent = () => {
             throw new Error('Workflow not found in backend');
           }
           
+          let executionCount = 0;
+          try {
+            const executionHistory = await executionService.getExecutionHistory(workflow.id || id, 1, 1);
+            executionCount = executionHistory.pagination?.total ?? 0;
+          } catch (historyError) {
+            console.warn('⚠️ Unable to load execution history:', historyError);
+          }
+
           // Convert backend workflow to store format
           console.log('🔄 Converting backend workflow to frontend format:', workflow);
           
@@ -179,7 +191,7 @@ const WorkflowBuilderContent = () => {
               return workflow.edges || [];
             })(),
             lastModified: new Date(workflow.metadata?.updatedAt || Date.now()),
-            executionCount: 0 // TODO: Get from execution history
+            executionCount
           };
           
           setCurrentWorkflow(storeWorkflow);
@@ -268,7 +280,12 @@ const WorkflowBuilderContent = () => {
             useWorkflowStore.setState({ workflows: updatedWorkflows });
           } else {
             console.error('❌ Workflow not found in local store either');
-            // TODO: Show error message to user or redirect to dashboard
+            toast({
+              title: 'Workflow not found',
+              description: 'We could not find that workflow. Redirecting to your workflows list.',
+              variant: 'destructive',
+            });
+            navigate('/workflows');
           }
         } finally {
           setLoading(false);
@@ -277,7 +294,7 @@ const WorkflowBuilderContent = () => {
     };
 
     loadWorkflow();
-  }, [id]);
+  }, [id, navigate, reactFlowInstance, setCurrentWorkflow, toast]);
 
   // Keyboard event handler for node deletion
   useEffect(() => {

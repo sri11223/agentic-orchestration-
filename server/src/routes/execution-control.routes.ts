@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { workflowEngine } from '../engine/workflow-engine';
 import { WorkflowModel } from '../models/workflow.model';
+import { ExecutionHistoryModel } from '../models/execution-history.model';
+import mongoose from 'mongoose';
 import { EventBus } from '../engine/event-bus';
 import { authenticate } from '../middleware/auth.middleware';
 import { rateLimit } from '../middleware/rate-limit';
@@ -365,31 +367,51 @@ router.get('/workflows/:workflowId/executions/stats',
   async (req: Request, res: Response) => {
     try {
       const { workflowId } = req.params;
+      const workflowObjectId = new mongoose.Types.ObjectId(workflowId);
 
-      // This would typically query the database for execution statistics
-      // For demo purposes, return mock data
-      const stats = {
-        totalExecutions: 45,
-        successfulExecutions: 38,
-        failedExecutions: 4,
-        pausedExecutions: 3,
-        averageDuration: 2400000, // 40 minutes in milliseconds
-        successRate: 84.4,
-        lastExecution: new Date().toISOString(),
-        recentExecutions: [
-          {
-            id: 'exec_1',
-            status: 'completed',
-            duration: 1800000,
-            startTime: new Date(Date.now() - 3600000).toISOString()
-          },
-          {
-            id: 'exec_2',
-            status: 'failed',
-            duration: 600000,
-            startTime: new Date(Date.now() - 7200000).toISOString()
+      const [summary] = await ExecutionHistoryModel.aggregate([
+        { $match: { workflowId: workflowObjectId } },
+        {
+          $group: {
+            _id: null,
+            totalExecutions: { $sum: 1 },
+            successfulExecutions: {
+              $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+            },
+            failedExecutions: {
+              $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+            },
+            pausedExecutions: {
+              $sum: { $cond: [{ $eq: ['$status', 'paused'] }, 1, 0] }
+            },
+            averageDuration: { $avg: '$metrics.totalDuration' },
+            lastExecution: { $max: '$startTime' }
           }
-        ]
+        }
+      ]);
+
+      const recentExecutions = await ExecutionHistoryModel.find({ workflowId: workflowObjectId })
+        .sort({ startTime: -1 })
+        .limit(5)
+        .select({ _id: 1, status: 1, startTime: 1, endTime: 1, 'metrics.totalDuration': 1 });
+
+      const stats = {
+        totalExecutions: summary?.totalExecutions || 0,
+        successfulExecutions: summary?.successfulExecutions || 0,
+        failedExecutions: summary?.failedExecutions || 0,
+        pausedExecutions: summary?.pausedExecutions || 0,
+        averageDuration: summary?.averageDuration || 0,
+        successRate: summary?.totalExecutions
+          ? (summary.successfulExecutions / summary.totalExecutions) * 100
+          : 0,
+        lastExecution: summary?.lastExecution || null,
+        recentExecutions: recentExecutions.map(exec => ({
+          id: exec._id,
+          status: exec.status,
+          duration: exec.metrics?.totalDuration || 0,
+          startTime: exec.startTime,
+          endTime: exec.endTime
+        }))
       };
 
       res.json(stats);

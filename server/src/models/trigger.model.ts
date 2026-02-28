@@ -37,6 +37,13 @@ export interface IEmailTriggerConfig extends ITriggerConfig {
       username: string;
       password: string;
     };
+    pop3Config?: {
+      host: string;
+      port: number;
+      secure: boolean;
+      username: string;
+      password: string;
+    };
   };
 }
 

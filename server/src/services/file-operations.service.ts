@@ -3,6 +3,8 @@ import { google, drive_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { Readable } from 'stream';
 import FormData from 'form-data';
+import crypto from 'crypto';
+import { XMLParser } from 'fast-xml-parser';
 
 export interface FileProvider {
   type: 'google_drive' | 'dropbox' | 'onedrive' | 'aws_s3';
@@ -470,12 +472,238 @@ export class FileOperationsService {
    * AWS S3 Operations (Basic implementation)
    */
   private async executeS3Operation(operation: FileOperation): Promise<FileOperationResult> {
-    // This would require AWS SDK implementation
-    // For now, return a placeholder
-    return {
-      success: false,
-      error: 'AWS S3 operations not yet implemented. Use HTTP API for S3 REST API calls.'
+    const { credentials } = operation.provider;
+    const accessKeyId = credentials?.accessKeyId || process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = credentials?.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
+    const sessionToken = credentials?.sessionToken || process.env.AWS_SESSION_TOKEN;
+    const region = credentials?.region || process.env.AWS_REGION || 'us-east-1';
+    const bucket = credentials?.bucket || process.env.AWS_S3_BUCKET;
+    const endpoint = credentials?.endpoint;
+
+    if (!accessKeyId || !secretAccessKey || !bucket) {
+      throw new Error('AWS S3 credentials or bucket not configured');
+    }
+
+    const baseHost = endpoint || `${bucket}.s3.${region}.amazonaws.com`;
+    const baseUrl = endpoint?.startsWith('http') ? endpoint : `https://${baseHost}`;
+    const key = operation.path || operation.fileName || '';
+    const objectKey = key.replace(/^\/+/, '');
+
+    switch (operation.operation) {
+      case 'upload':
+        if (!operation.fileContent || !operation.fileName) {
+          throw new Error('fileName and fileContent are required for S3 upload');
+        }
+        return await this.uploadToS3(baseUrl, baseHost, region, bucket, objectKey || operation.fileName, operation, accessKeyId, secretAccessKey, sessionToken);
+      case 'download':
+        if (!objectKey) {
+          throw new Error('path is required for S3 download');
+        }
+        return await this.downloadFromS3(baseUrl, baseHost, region, bucket, objectKey, accessKeyId, secretAccessKey, sessionToken);
+      case 'delete':
+        if (!objectKey) {
+          throw new Error('path is required for S3 delete');
+        }
+        return await this.deleteFromS3(baseUrl, baseHost, region, bucket, objectKey, accessKeyId, secretAccessKey, sessionToken);
+      case 'list':
+        return await this.listS3Objects(baseUrl, baseHost, region, bucket, objectKey, accessKeyId, secretAccessKey, sessionToken);
+      default:
+        throw new Error(`Operation ${operation.operation} not supported for S3`);
+    }
+  }
+
+  private async uploadToS3(
+    baseUrl: string,
+    host: string,
+    region: string,
+    bucket: string,
+    key: string,
+    operation: FileOperation,
+    accessKeyId: string,
+    secretAccessKey: string,
+    sessionToken?: string
+  ): Promise<FileOperationResult> {
+    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+    const body = typeof operation.fileContent === 'string'
+      ? Buffer.from(operation.fileContent)
+      : operation.fileContent;
+
+    const headers: Record<string, string> = {
+      host,
+      'content-type': operation.mimeType || 'application/octet-stream',
+      'content-length': String(body?.length || 0)
     };
+
+    const signed = this.signAwsRequest('PUT', `/${key}`, '', headers, body || Buffer.from(''), region, bucket, accessKeyId, secretAccessKey, sessionToken);
+
+    await axios.put(url, body, { headers: signed });
+
+    return {
+      success: true,
+      fileName: key,
+      fileUrl: url
+    };
+  }
+
+  private async downloadFromS3(
+    baseUrl: string,
+    host: string,
+    region: string,
+    bucket: string,
+    key: string,
+    accessKeyId: string,
+    secretAccessKey: string,
+    sessionToken?: string
+  ): Promise<FileOperationResult> {
+    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+    const headers: Record<string, string> = { host };
+    const signed = this.signAwsRequest('GET', `/${key}`, '', headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
+
+    const response = await axios.get(url, { headers: signed, responseType: 'arraybuffer' });
+    const buffer = Buffer.from(response.data);
+
+    return {
+      success: true,
+      fileName: key,
+      size: buffer.length,
+      downloadUrl: `data:application/octet-stream;base64,${buffer.toString('base64')}`
+    };
+  }
+
+  private async deleteFromS3(
+    baseUrl: string,
+    host: string,
+    region: string,
+    bucket: string,
+    key: string,
+    accessKeyId: string,
+    secretAccessKey: string,
+    sessionToken?: string
+  ): Promise<FileOperationResult> {
+    const url = `${baseUrl}/${encodeURIComponent(key).replace(/%2F/g, '/')}`;
+    const headers: Record<string, string> = { host };
+    const signed = this.signAwsRequest('DELETE', `/${key}`, '', headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
+
+    await axios.delete(url, { headers: signed });
+
+    return {
+      success: true,
+      fileName: key
+    };
+  }
+
+  private async listS3Objects(
+    baseUrl: string,
+    host: string,
+    region: string,
+    bucket: string,
+    prefix: string,
+    accessKeyId: string,
+    secretAccessKey: string,
+    sessionToken?: string
+  ): Promise<FileOperationResult> {
+    const query = `list-type=2${prefix ? `&prefix=${encodeURIComponent(prefix)}` : ''}`;
+    const url = `${baseUrl}/?${query}`;
+    const headers: Record<string, string> = { host };
+    const signed = this.signAwsRequest('GET', '/', query, headers, '', region, bucket, accessKeyId, secretAccessKey, sessionToken);
+
+    const response = await axios.get(url, { headers: signed });
+    const xml = response.data as string;
+    const parser = new XMLParser({ ignoreAttributes: false });
+    const parsed = parser.parse(xml);
+    const contents = parsed?.ListBucketResult?.Contents;
+    const items = Array.isArray(contents) ? contents : contents ? [contents] : [];
+
+    const files = items.map(item => ({
+      id: item.Key || '',
+      name: item.Key || '',
+      size: item.Size ? Number(item.Size) : 0,
+      mimeType: 'application/octet-stream',
+      modifiedTime: item.LastModified || '',
+      webViewLink: `${baseUrl}/${item.Key || ''}`
+    }));
+
+    return {
+      success: true,
+      files
+    };
+  }
+
+  private signAwsRequest(
+    method: string,
+    path: string,
+    query: string,
+    headers: Record<string, string>,
+    body: Buffer | string,
+    region: string,
+    bucket: string,
+    accessKeyId: string,
+    secretAccessKey: string,
+    sessionToken?: string
+  ): Record<string, string> {
+    const service = 's3';
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.substring(0, 8);
+
+    const payloadHash = crypto.createHash('sha256').update(body || '').digest('hex');
+    const canonicalHeaders = Object.entries({
+      ...headers,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+      ...(sessionToken ? { 'x-amz-security-token': sessionToken } : {})
+    })
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key.toLowerCase()}:${String(value).trim()}\n`)
+      .join('');
+
+    const signedHeaders = Object.keys({
+      ...headers,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+      ...(sessionToken ? { 'x-amz-security-token': sessionToken } : {})
+    })
+      .map(key => key.toLowerCase())
+      .sort()
+      .join(';');
+
+    const canonicalRequest = [
+      method,
+      path,
+      query,
+      canonicalHeaders,
+      signedHeaders,
+      payloadHash
+    ].join('\n');
+
+    const algorithm = 'AWS4-HMAC-SHA256';
+    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const stringToSign = [
+      algorithm,
+      amzDate,
+      credentialScope,
+      crypto.createHash('sha256').update(canonicalRequest).digest('hex')
+    ].join('\n');
+
+    const signingKey = this.getSignatureKey(secretAccessKey, dateStamp, region, service);
+    const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+
+    const authorizationHeader = `${algorithm} Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    return {
+      ...headers,
+      'x-amz-date': amzDate,
+      'x-amz-content-sha256': payloadHash,
+      ...(sessionToken ? { 'x-amz-security-token': sessionToken } : {}),
+      Authorization: authorizationHeader
+    };
+  }
+
+  private getSignatureKey(secretAccessKey: string, dateStamp: string, region: string, service: string) {
+    const kDate = crypto.createHmac('sha256', `AWS4${secretAccessKey}`).update(dateStamp).digest();
+    const kRegion = crypto.createHmac('sha256', kDate).update(region).digest();
+    const kService = crypto.createHmac('sha256', kRegion).update(service).digest();
+    return crypto.createHmac('sha256', kService).update('aws4_request').digest();
   }
 
   /**
@@ -496,7 +724,7 @@ export class FileOperationsService {
       google_drive: ['upload', 'download', 'list', 'delete', 'share', 'move', 'copy'],
       dropbox: ['upload', 'download', 'list', 'delete', 'move'],
       onedrive: ['upload', 'download', 'list', 'delete', 'move'],
-      aws_s3: ['upload', 'download', 'list', 'delete'] // When implemented
+      aws_s3: ['upload', 'download', 'list', 'delete']
     };
   }
 }

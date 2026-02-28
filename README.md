@@ -156,19 +156,33 @@ class AIService {
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/agentic-orchestration-platform
-cd agentic-orchestration-platform/server
+cd agentic-orchestration-platform
 
-# Install dependencies
+# Install backend dependencies
+cd server
 npm install
 
-# Setup environment
+# Setup backend environment
 cp .env.example .env
-# Update .env with your MongoDB Atlas connection string
+# Update .env with your MongoDB Atlas connection string and JWT secrets
 
-# Build and start
-npm run build
-npm start
+# Start backend (defaults to http://localhost:3000)
+npm run dev
+
+# In a new terminal, install frontend dependencies
+cd ../client
+npm install
+
+# Optional: point the frontend at a custom API URL
+# echo "VITE_API_BASE_URL=http://localhost:3000" > .env.local
+
+# Start frontend (defaults to http://localhost:5173)
+npm run dev
 ```
+
+### Environment Notes
+- **Backend** uses `PORT` (default `3000`) and `FRONTEND_URL` for CORS. 
+- **Frontend** uses `VITE_API_BASE_URL` to reach the API (default `http://localhost:3000`). 
 
 ### MongoDB Atlas Setup
 1. Create free MongoDB Atlas cluster

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000';
+import { API_URL } from '@/config/api';
 
 export interface LoginRequest {
   email: string;
@@ -41,7 +41,7 @@ class AuthService {
   private refreshPromise: Promise<string> | null = null;
 
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -65,11 +65,11 @@ class AuthService {
 
   async register(data: RegisterRequest): Promise<AuthResponse> {
     console.log('🚀 Frontend: Starting registration request');
-    console.log('📡 URL:', `${API_BASE_URL}/api/auth/register`);
+    console.log('📡 URL:', `${API_URL}/auth/register`);
     console.log('📦 Data:', data);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +105,7 @@ class AuthService {
     try {
       const refreshToken = localStorage.getItem('refreshToken');
       if (refreshToken) {
-        await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        await fetch(`${API_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -161,7 +161,7 @@ class AuthService {
   }
 
   private async _performTokenRefresh(refreshToken: string): Promise<string> {
-    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+    const response = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

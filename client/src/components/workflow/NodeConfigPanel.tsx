@@ -9,11 +9,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { X, TestTube, Save, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AINodeConfig } from './AINodeConfig';
-import { workflowService } from '@/services/workflow.service';
 import { authService } from '@/services/auth.service';
 import { useTriggers, useTrigger } from '@/hooks/useTriggers';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { API_URL } from '@/config/api';
 
 const NodeConfigPanel = () => {
   const { selectedNode, setSelectedNode, updateNodeData, workflowId } = useWorkflowStore();
@@ -281,6 +281,7 @@ const NodeConfigPanel = () => {
       return;
     }
 
+    setTesting(true);
     try {
       const executionId = await executeManualTrigger();
       toast({
@@ -293,6 +294,8 @@ const NodeConfigPanel = () => {
         description: error instanceof Error ? error.message : "Failed to execute trigger",
         variant: "destructive",
       });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -301,7 +304,7 @@ const NodeConfigPanel = () => {
       // Use the auth service to get a valid token
       const token = await authService.getValidToken();
       
-      const result = await fetch('http://localhost:5000/api/ai/test', {
+      const result = await fetch(`${API_URL}/ai/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -759,10 +762,7 @@ const NodeConfigPanel = () => {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => {
-                  // TODO: Implement manual trigger test
-                  console.log('Manual trigger test');
-                }}
+                onClick={handleExecuteManualTrigger}
               >
                 Test Trigger
               </Button>
@@ -974,7 +974,11 @@ const NodeConfigPanel = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleTestTrigger}
+                onClick={
+                  selectedNode.data.config.nodeType === 'manual-trigger'
+                    ? handleExecuteManualTrigger
+                    : handleTestTrigger
+                }
                 disabled={testing || !selectedNode.data.triggerId}
                 className="flex-1"
               >

@@ -3,16 +3,20 @@ import { EventEmitter } from 'events';
 import { AIService } from '../services/ai.service';
 import { WorkflowExecutionModel } from '../models/workflow-execution.model';
 import { EventLogService } from '../services/event-log.service';
+import { WorkflowModel } from '../models/workflow.model';
+import { HttpService } from '../services/http.service';
 
 export class WorkflowEngine {
   private eventEmitter: EventEmitter;
   private aiService: AIService;
   private eventLogService: EventLogService;
+  private httpService: HttpService;
 
   constructor() {
     this.eventEmitter = new EventEmitter();
     this.aiService = new AIService();
     this.eventLogService = new EventLogService();
+    this.httpService = new HttpService();
     this.setupEventListeners();
   }
 
@@ -98,7 +102,7 @@ export class WorkflowEngine {
     await execution.save();
 
     // Get next nodes and continue execution
-    const nextNodes = await this.getNextNodes(nodeId, execution.workflowId.toString());
+    const nextNodes = await this.getNextNodes(nodeId, execution.workflowId.toString(), execution.data as Record<string, any>);
     if (nextNodes.length === 0) {
       await this.completeWorkflow(execution as any);
     } else {
@@ -139,32 +143,130 @@ export class WorkflowEngine {
 
   // Helper methods to be implemented
   private async getStartNode(workflowId: string): Promise<INode> {
-    // Implementation to get the first node of the workflow
-    throw new Error('Not implemented');
+    const workflow = await WorkflowModel.findById(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow ${workflowId} not found`);
+    }
+
+    const startNode = workflow.nodes.find(node => node.type === NodeType.TRIGGER || node.type === NodeType.TIMER);
+    if (!startNode) {
+      const fallbackNode = workflow.nodes[0];
+      if (!fallbackNode) {
+        throw new Error(`Workflow ${workflowId} has no nodes`);
+      }
+      return fallbackNode;
+    }
+    return startNode as any;
   }
 
-  private async getNextNodes(nodeId: string, workflowId: string): Promise<INode[]> {
-    // Implementation to get next nodes based on edges
-    throw new Error('Not implemented');
+  private async getNextNodes(
+    nodeId: string,
+    workflowId: string,
+    executionData: Record<string, any>
+  ): Promise<INode[]> {
+    const workflow = await WorkflowModel.findById(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow ${workflowId} not found`);
+    }
+
+    const outgoingEdges = workflow.edges.filter(edge => edge.source === nodeId);
+    if (outgoingEdges.length === 0) {
+      return [];
+    }
+
+    const validEdges = outgoingEdges.filter(edge => {
+      if (!edge.data?.condition && !edge.condition) return true;
+      const condition = edge.data?.condition || edge.condition;
+      return this.evaluateCondition(condition, executionData);
+    });
+
+    return workflow.nodes.filter(node =>
+      validEdges.some(edge => edge.target === node.id)
+    ) as any;
   }
 
   private async processDecisionNode(node: INode, data: Record<string, any>): Promise<string> {
-    // Implementation for decision logic
-    throw new Error('Not implemented');
+    const config = node.data?.config || node.data || {};
+    const expression = config.expression || config.condition;
+
+    if (!expression) {
+      return 'true';
+    }
+
+    const result = this.evaluateCondition(expression, data);
+    return result ? 'true' : 'false';
   }
 
   private async executeAction(node: INode, data: Record<string, any>): Promise<any> {
-    // Implementation for action execution
-    throw new Error('Not implemented');
+    const config = node.data?.config || node.data || {};
+    if (config.url) {
+      const response = await this.httpService.request({
+        url: config.url,
+        method: config.method || 'GET',
+        headers: config.headers,
+        data: config.body || config.payload
+      });
+      return response;
+    }
+
+    return {
+      message: 'No action configured',
+      nodeId: node.id
+    };
   }
 
   private async createHumanTask(node: INode, execution: IWorkflowExecution): Promise<void> {
-    // Implementation for human task creation
-    throw new Error('Not implemented');
+    execution.status = WorkflowStatus.PAUSED;
+    execution.currentNodeId = node.id;
+    await (execution as any).save();
+
+    await this.eventLogService.logEvent({
+      type: EventType.HUMAN_TASK_CREATED,
+      executionId: execution.id,
+      nodeId: node.id,
+      data: node.data
+    });
   }
 
   private async handleWorkflowFailure(workflowId: string, error: Error): Promise<void> {
-    // Implementation for workflow failure handling
-    throw new Error('Not implemented');
+    const execution = await WorkflowExecutionModel.findOne({
+      workflowId,
+      status: WorkflowStatus.RUNNING
+    }).sort({ startedAt: -1 });
+
+    if (execution) {
+      execution.status = WorkflowStatus.FAILED;
+      execution.error = error.message;
+      execution.completedAt = new Date();
+      await execution.save();
+
+      await this.eventLogService.logEvent({
+        type: EventType.WORKFLOW_FAILED,
+        executionId: execution.id,
+        data: { error: error.message }
+      });
+    }
+  }
+
+  private evaluateCondition(condition: string, data: Record<string, any>): boolean {
+    try {
+      const [variable, operator, rawValue] = condition.split(' ');
+      const actualValue = data[variable];
+      const value = rawValue?.replace(/^"|"$/g, '');
+
+      switch (operator) {
+        case '>': return actualValue > Number(value);
+        case '<': return actualValue < Number(value);
+        case '>=': return actualValue >= Number(value);
+        case '<=': return actualValue <= Number(value);
+        case '==': return actualValue == value;
+        case '!=': return actualValue != value;
+        case 'contains': return String(actualValue).includes(String(value));
+        default: return false;
+      }
+    } catch (error) {
+      console.warn('Decision evaluation failed:', condition, error);
+      return false;
+    }
   }
 }

@@ -1,8 +1,10 @@
 import express from 'express';
 import { EventBus } from '../engine/event-bus';
 import { workflowEngine } from '../engine/workflow-engine';
+import { EmailNotificationService } from '../services/email-notification.service';
 
 const router = express.Router();
+const emailNotificationService = new EmailNotificationService();
 
 /**
  * @route POST /api/webhooks/workflow-trigger
@@ -216,6 +218,92 @@ router.post('/ai-completion', async (req, res) => {
 });
 
 /**
+ * @route GET /api/webhooks/email/open
+ * @desc Track email open events
+ * @access Public
+ */
+router.get('/email/open', async (req, res) => {
+  try {
+    const { templateId, campaignId, recipient, trackingId } = req.query as Record<string, string>;
+    if (recipient) {
+      await emailNotificationService.trackEvent('opened', {
+        templateId,
+        campaignId,
+        recipient,
+        messageId: trackingId,
+        metadata: {
+          userAgent: req.get('User-Agent'),
+          ip: req.ip
+        }
+      });
+    }
+
+    const pixel = Buffer.from(
+      'R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==',
+      'base64'
+    );
+    res.set('Content-Type', 'image/gif');
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.status(200).send(pixel);
+  } catch (error) {
+    res.status(200).send('');
+  }
+});
+
+/**
+ * @route GET /api/webhooks/email/click
+ * @desc Track email click events and redirect
+ * @access Public
+ */
+router.get('/email/click', async (req, res) => {
+  const { url, templateId, campaignId, recipient, trackingId } = req.query as Record<string, string>;
+  if (recipient) {
+    await emailNotificationService.trackEvent('clicked', {
+      templateId,
+      campaignId,
+      recipient,
+      messageId: trackingId,
+      metadata: {
+        url,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+      }
+    });
+  }
+
+  if (!url) {
+    return res.status(400).send('Missing redirect url');
+  }
+
+  return res.redirect(url);
+});
+
+/**
+ * @route GET /api/webhooks/email/unsubscribe
+ * @desc Track email unsubscribe events
+ * @access Public
+ */
+router.get('/email/unsubscribe', async (req, res) => {
+  const { templateId, campaignId, recipient, reason } = req.query as Record<string, string>;
+  if (!recipient) {
+    return res.status(400).send('Missing recipient');
+  }
+
+  await emailNotificationService.trackEvent('unsubscribed', {
+    templateId,
+    campaignId,
+    recipient,
+    metadata: {
+      reason,
+      userAgent: req.get('User-Agent'),
+      ip: req.ip
+    }
+  });
+
+  return res.status(200).send('You have been unsubscribed.');
+});
+
+/**
  * @route GET /api/webhooks/health
  * @desc Health check for webhook endpoints
  * @access Public
@@ -331,10 +419,54 @@ async function handleMailgunWebhook(payload: any, headers: any) {
   const eventData = payload['event-data'];
   
   if (eventData) {
+    const userVars = eventData['user-variables'] || {};
+    const recipient = eventData.recipient || eventData['recipient'] || userVars.recipient;
+    const templateId = userVars.templateId || (Array.isArray(eventData.tags) ? eventData.tags[0] : undefined);
+    const campaignId = userVars.campaignId;
+    const messageId = eventData.message?.headers?.['message-id'] || eventData.message?.headers?.['Message-Id'];
+
     console.log(`Mailgun ${eventData.event} event:`, {
       recipient: eventData.recipient,
       message: eventData.message?.headers?.subject
     });
+
+    const basePayload = {
+      templateId,
+      campaignId,
+      recipient,
+      messageId,
+      metadata: {
+        severity: eventData.severity,
+        reason: eventData.reason,
+        deliveryStatus: eventData['delivery-status'],
+        geolocation: eventData.geolocation,
+        clientInfo: eventData['client-info'],
+        url: eventData.url
+      }
+    };
+
+    switch (eventData.event) {
+      case 'delivered':
+        await emailNotificationService.trackEvent('delivered', basePayload);
+        break;
+      case 'opened':
+        await emailNotificationService.trackEvent('opened', basePayload);
+        break;
+      case 'clicked':
+        await emailNotificationService.trackEvent('clicked', basePayload);
+        break;
+      case 'unsubscribed':
+      case 'complained':
+        await emailNotificationService.trackEvent('unsubscribed', basePayload);
+        break;
+      case 'bounced':
+      case 'failed':
+      case 'dropped':
+        await emailNotificationService.trackEvent('bounced', basePayload);
+        break;
+      default:
+        break;
+    }
   }
 }
 
