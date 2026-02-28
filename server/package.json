@@ -4,9 +4,9 @@
   "description": "Backend for Agentic Orchestration Platform",
   "main": "dist/app.js",
   "scripts": {
-    "start": "ts-node src/app.ts",
-    "start:prod": "node dist/app.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "start": "ts-node src/server.ts",
+    "start:prod": "node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "test": "jest",
     "lint": "eslint . --ext .ts"
@@ -45,7 +45,15 @@
     "poplib": "^0.1.7",
     "redis": "^4.7.0",
     "typescript": "^5.9.3",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "bcryptjs": "^3.0.2",
+    "compression": "^1.7.4",
+    "express-validator": "^7.3.0",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.1",
+    "jsonwebtoken": "^9.0.2",
+    "winston": "^3.18.3",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -61,18 +69,11 @@
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.46.0",
     "@typescript-eslint/parser": "^8.46.0",
-    "bcryptjs": "^3.0.2",
-    "compression": "^1.7.4",
     "eslint": "^9.37.0",
-    "express-validator": "^7.3.0",
-    "helmet": "^8.1.0",
-    "ioredis": "^5.8.1",
-    "jsonwebtoken": "^9.0.2",
     "nodemailer": "^7.0.9",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "winston": "^3.18.3"
+    "ts-node-dev": "^2.0.0"
   }
 }

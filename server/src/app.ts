@@ -32,24 +32,8 @@ const PORT = process.env.PORT || 3000;
 const securityMiddleware = securityOptimizationService.getSecurityMiddleware();
 securityMiddleware.forEach(middleware => app.use(middleware));
 
-// Legacy security middleware (remove if conflicts)
-/*
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-    },
-  },
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true
-  }
-}));
-*/
+// Legacy security middleware (fully handled by securityOptimizationService above)
+// See services/security-optimization.service.ts for helmet, rate-limiting, CORS, etc.
 
 // CORS configuration
 app.use(cors({
@@ -74,28 +58,17 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Initialize memory management
 const memoryManager = MemoryManager.getInstance();
-console.log('🧹 Memory management initialized');
 
 // Performance monitoring middleware
 app.use(performanceMiddleware());
 
-// Compression middleware (remove if conflicts)
-/*
+// Compression middleware
 app.use(compression());
-*/
 
 // Logging middleware
 app.use(morgan('combined'));
 
-// Global rate limiting (remove if conflicts)
-/*
-const globalRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // 1000 requests per window
-  keyPrefix: 'global:'
-});
-app.use(globalRateLimit);
-*/
+// Rate limiting is handled by securityOptimizationService above
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -105,13 +78,6 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development'
   });
-});
-
-// Debug middleware - log all incoming requests
-app.use((req, res, next) => {
-  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.url}`);
-  console.log('🔍 Headers:', req.headers);
-  next();
 });
 
 // API routes
@@ -126,11 +92,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/triggers', require('./routes/trigger.routes').default);
 app.use('/api', executionControlRoutes);
 
-// Initialize trigger service after routes are set up
-setTimeout(() => {
-  const { triggerService } = require('./services/trigger.service');
-  console.log('🚀 Trigger service initialized');
-}, 2000);
+// Trigger service initialization is handled by server.ts to avoid duplication
 
 // 404 handler - catch all unmatched routes
 app.use((req, res) => {
@@ -143,7 +105,6 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Global error handler:', error);
 
   // Mongoose validation error
   if (error.name === 'ValidationError') {
@@ -190,30 +151,6 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Graceful shutdown handler
-const gracefulShutdown = (signal: string) => {
-  console.log(`Received ${signal}. Starting graceful shutdown...`);
-  
-  const server = app.listen(PORT);
-  
-  server.close(() => {
-    console.log('HTTP server closed.');
-    
-    // Close database connection
-    process.exit(0);
-  });
-
-  // Force close after 30 seconds
-  setTimeout(() => {
-    console.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 30000);
-};
-
-// Handle process termination
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
@@ -224,32 +161,5 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
 });
-
-// Start the server
-const startServer = async () => {
-  try {
-    await connectDatabase();
-    
-    // Initialize trigger service
-    console.log('🔧 Initializing trigger service...');
-    const { triggerService } = await import('./services/trigger.service');
-    console.log('✅ Trigger service initialized');
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-      console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:8080'}`);
-      console.log(`⚡ Trigger system ready for email, webhook, schedule, and manual triggers`);
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-// Only start server if this file is run directly
-if (require.main === module) {
-  startServer();
-}
 
 export default app;

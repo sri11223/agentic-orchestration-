@@ -58,7 +58,6 @@ class WorkflowExecutionService {
 
       return response.json();
     } catch (error) {
-      console.error('❌ Execution service request failed:', error);
       throw error;
     }
   }
@@ -67,8 +66,6 @@ class WorkflowExecutionService {
    * Execute a workflow
    */
   async executeWorkflow(request: ExecutionRequest): Promise<{ executionId: string; status: string }> {
-    console.log('🚀 Starting workflow execution:', request.workflowId);
-    
     const result = await this.request(`/workflows/${request.workflowId}/execute`, {
       method: 'POST',
       body: JSON.stringify({
@@ -76,7 +73,6 @@ class WorkflowExecutionService {
       })
     });
 
-    console.log('✅ Workflow execution started:', result);
     return result;
   }
 
@@ -183,14 +179,11 @@ class WorkflowExecutionService {
     cost?: number;
     confidence?: number;
   }> {
-    console.log('🧪 Testing AI node configuration:', config);
-    
     const result = await this.request('/ai/test', {
       method: 'POST',
       body: JSON.stringify(config)
     });
 
-    console.log('✅ AI test result:', result);
     return result;
   }
 
@@ -234,7 +227,6 @@ class WorkflowExecutionService {
         retryCount = 0;
         
         if (!status) {
-          console.warn('No status received, continuing to poll...');
           return;
         }
 
@@ -253,17 +245,15 @@ class WorkflowExecutionService {
         try {
           const events = await this.getExecutionEvents(executionId);
           events.forEach(event => callbacks.onEvent?.(event));
-        } catch (eventError) {
-          console.warn('Error fetching events:', eventError);
+        } catch {
+          // Error fetching events - continue polling
         }
 
       } catch (error) {
-        console.error('Error polling execution status:', error);
         retryCount++;
         
         // If too many failures, stop polling
         if (retryCount >= maxRetries) {
-          console.error(`Polling failed ${maxRetries} times, stopping...`);
           callbacks.onError?.('Failed to get execution status after multiple retries');
           clearInterval(pollInterval);
         }

@@ -13,8 +13,6 @@ export const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({
   edges, 
   className = "h-32" 
 }) => {
-  console.log('🖼️ WorkflowPreview rendering:', { nodes: nodes?.length, edges: edges?.length });
-  
   if (!nodes || !nodes.length) {
     return (
       <div className={`${className} bg-background rounded-lg border border-border flex items-center justify-center`}>
@@ -46,8 +44,6 @@ export const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({
   const width = rawWidth > 0 ? rawWidth : 300;
   const height = rawHeight > 0 ? rawHeight : 200;
   const scale = Math.min(280 / width, 120 / height, 0.8);
-  
-  console.log('🔍 Preview bounds:', { bounds, width, height, scale });
 
   const getCategoryColor = (category: string): string => {
     const colors: Record<string, string> = {

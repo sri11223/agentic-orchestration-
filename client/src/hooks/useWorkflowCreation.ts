@@ -11,7 +11,6 @@ export const useWorkflowCreation = (onSuccess?: () => void) => {
   const createWorkflow = async () => {
     try {
       setCreating(true);
-      console.log('🚀 Starting workflow creation...');
       
       // Create empty workflow template
       const emptyWorkflow = workflowService.createEmptyWorkflow();
@@ -24,7 +23,6 @@ export const useWorkflowCreation = (onSuccess?: () => void) => {
       
       // Navigate to the workflow builder with the real ID
       navigate(`/workflow/${createdWorkflow.id}`);
-      console.log('✅ Workflow created and navigating to:', createdWorkflow.id);
       
       // Call success callback to refresh dashboard
       if (onSuccess) {
@@ -32,10 +30,7 @@ export const useWorkflowCreation = (onSuccess?: () => void) => {
       }
       
     } catch (error) {
-      console.error('❌ Failed to create workflow on backend:', error);
-      
       // Fallback: create locally and navigate
-      console.log('🔄 Falling back to local workflow creation...');
       createNewWorkflow();
       navigate('/workflow/new');
     } finally {

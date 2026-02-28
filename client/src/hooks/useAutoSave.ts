@@ -2,42 +2,7 @@ import { useCallback, useRef, useEffect, useState } from 'react';
 import { workflowService } from '@/services/workflow.service';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { toast } from '@/hooks/use-toast';
-
-// Map frontend node types to backend enum values
-const mapFrontendToBackendNodeType = (frontendType: string): string => {
-  const mapping: Record<string, string> = {
-    // Triggers
-    'manual-trigger': 'trigger',
-    'webhook-trigger': 'trigger', 
-    'schedule-trigger': 'trigger',
-    'email-trigger': 'trigger',
-    
-    // AI Agents
-    'ai-text-generator': 'ai_processor',
-    'ai-decision-maker': 'ai_processor',
-    'ai-data-extractor': 'ai_processor',
-    'ai-web-researcher': 'ai_processor',
-    
-    // Actions
-    'http-request': 'action',
-    'database-query': 'action',
-    'send-email': 'email_automation',
-    'slack-message': 'action',
-    
-    // Logic
-    'condition': 'decision',
-    'switch': 'decision',
-    'loop': 'action',
-    'merge': 'action',
-    
-    // Human
-    'approval-request': 'human_task',
-    'form-input': 'form_builder',
-    'manual-task': 'human_task'
-  };
-  
-  return mapping[frontendType] || 'trigger';
-};
+import { mapFrontendToBackendNodeType } from '@/lib/nodeTypeMapping';
 
 export const useAutoSave = (workflowId?: string) => {
   // Don't destructure currentWorkflow here to avoid stale closure
@@ -66,26 +31,11 @@ export const useAutoSave = (workflowId?: string) => {
       hasChangesRef.current = false;
       setSaveStatus('saving');
 
-      console.log('💾 Auto-saving workflow:', workflowId);
-      console.log('💾 Fresh state:', {
-        nodeCount: currentWorkflow.nodes.length,
-        edgeCount: currentWorkflow.edges.length,
-        edges: currentWorkflow.edges
-      });
-
       // Convert store format to backend format
       const workflowData = {
         name: currentWorkflow.name,
         description: currentWorkflow.description,
         nodes: currentWorkflow.nodes.map(node => {
-          console.log('💾 Saving node:', {
-            id: node.id,
-            label: node.data?.label,
-            frontendType: node.data?.config?.nodeType,
-            backendType: mapFrontendToBackendNodeType(node.data?.config?.nodeType || 'trigger'),
-            position: node.position
-          });
-          
           return {
             id: node.id,
             type: mapFrontendToBackendNodeType(node.data?.config?.nodeType || 'trigger'),
@@ -98,13 +48,10 @@ export const useAutoSave = (workflowId?: string) => {
             position: node.position
           };
         }),
-        edges: (() => {
-          console.log('🔗 Saving edges:', currentWorkflow.edges);
-          return currentWorkflow.edges.map(edge => ({
-            ...edge,
-            type: edge.type || 'default' // Ensure all edges have a type
-          }));
-        })(),
+        edges: currentWorkflow.edges.map(edge => ({
+          ...edge,
+          type: edge.type || 'default'
+        })),
         status: (currentWorkflow.status === 'archived' ? 'draft' : currentWorkflow.status) || 'draft'
       };
 
@@ -113,7 +60,6 @@ export const useAutoSave = (workflowId?: string) => {
       // Update save status
       setSaveStatus('saved');
       setLastSaved(new Date());
-      console.log('✅ Workflow auto-saved successfully');
 
       // Reset to idle after 2 seconds
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -126,7 +72,6 @@ export const useAutoSave = (workflowId?: string) => {
       // });
 
     } catch (error) {
-      console.error('❌ Auto-save failed:', error);
       hasChangesRef.current = true; // Retain changes flag for retry
       setSaveStatus('error');
       
@@ -183,8 +128,8 @@ export const useAutoSave = (workflowId?: string) => {
   return {
     debouncedSave,
     saveNow,
-    isSaving: isSavingRef.current,
-    hasUnsavedChanges: hasChangesRef.current,
+    isSaving: saveStatus === 'saving',
+    hasUnsavedChanges: saveStatus !== 'saved' && saveStatus !== 'idle',
     saveStatus,
     lastSaved
   };

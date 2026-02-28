@@ -82,19 +82,11 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const current = get().currentWorkflow;
     if (!current) return;
     
-    console.log('🏪 Store - updateNodeData called:', {
-      nodeId,
-      data,
-      currentNodes: current.nodes.length
-    });
-    
     const updatedNodes = current.nodes.map(node =>
       node.id === nodeId
         ? { ...node, data: { ...node.data, ...data } }
         : node
     );
-    
-    console.log('🏪 Store - Node updated, triggering auto-save with lastModified');
     
     set({
       currentWorkflow: { ...current, nodes: updatedNodes, lastModified: new Date() }
@@ -125,12 +117,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const current = get().currentWorkflow;
     if (!current) return;
     
-    console.log('🏪 Store: Adding connection to edges:', connection);
-    console.log('🏪 Store: Current edges before:', current.edges.length);
-    
     const updatedEdges = addEdge(connection, current.edges);
-    
-    console.log('🏪 Store: Updated edges after:', updatedEdges.length);
     
     set({
       currentWorkflow: { ...current, edges: updatedEdges, lastModified: new Date() }
@@ -205,7 +192,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const current = get().currentWorkflow;
     if (!current) return;
     
-    const workflows = get().workflows;
+    const workflows = [...get().workflows];
     const existingIndex = workflows.findIndex(w => w.id === current.id);
     
     if (existingIndex >= 0) {
@@ -214,30 +201,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       workflows.push(current);
     }
     
-    set({ workflows: [...workflows] });
-    console.log('Workflow saved:', current.name);
+    set({ workflows });
   },
   
   executeWorkflow: () => {
     const current = get().currentWorkflow;
     if (!current) return;
     
+    // The ExecutionPanel and WorkflowNavbar handle real execution via workflowService/executionService.
+    // This store method just tracks the execution status in the UI.
     set({ executionStatus: 'running' });
-    
-    // Simulate execution
-    setTimeout(() => {
-      set({
-        executionStatus: 'success',
-        currentWorkflow: current ? {
-          ...current,
-          executionCount: current.executionCount + 1
-        } : null
-      });
-      
-      setTimeout(() => {
-        set({ executionStatus: 'idle' });
-      }, 2000);
-    }, 3000);
   },
   
   createNewWorkflow: () => {

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Brain, Zap, Globe, TestTube } from 'lucide-react';
+import { Sparkles, Brain, TestTube } from 'lucide-react';
 
 interface AINodeConfigProps {
   nodeId: string;
@@ -106,14 +106,7 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
       maxTokens: config.maxTokens
     };
     
-    console.log('🔧 AI Node Config - Saving configuration:', {
-      nodeId,
-      saveData
-    });
-    
     onSave(saveData);
-    
-    console.log('✅ AI Node Config - Save callback completed');
   };
 
   const handleTest = async () => {
@@ -123,12 +116,12 @@ export function AINodeConfig({ nodeId, initialData, onSave, onTest }: AINodeConf
     try {
       const result = await onTest({
         ...config,
-        temperature: config.temperature[0],
-        maxTokens: config.maxTokens[0]
+        temperature: config.temperature,
+        maxTokens: config.maxTokens
       });
       setTestResult(result);
-    } catch (error) {
-      setTestResult({ error: error.message });
+    } catch (error: any) {
+      setTestResult({ error: error?.message || 'Test failed' });
     } finally {
       setTesting(false);
     }

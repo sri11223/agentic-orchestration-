@@ -17,16 +17,6 @@ const CustomNode = ({ data, selected, id }: NodeProps) => {
   const Icon = nodeConfig?.icon;
   const category = typedData.category || nodeConfig?.category || 'trigger'; // Fallback to nodeConfig category
   
-  // Debug logging for missing categories
-  if (!typedData.category) {
-    console.log('⚠️  Node missing category:', {
-      nodeId: id,
-      data: typedData,
-      nodeConfig: nodeConfig?.label,
-      fallbackCategory: category
-    });
-  }
-
   const handleClick = useCallback(() => {
     if (id) {
       setSelectedNode({ id, data: typedData } as any);
@@ -117,13 +107,6 @@ const CustomNode = ({ data, selected, id }: NodeProps) => {
         </Button>
       )}
       
-      {/* Input handle - now available for all nodes including triggers */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="!w-3 !h-3 !bg-primary !border-2 !border-background"
-      />
-
       {/* Output handle */}
       <Handle
         type="source"

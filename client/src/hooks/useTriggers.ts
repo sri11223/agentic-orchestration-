@@ -59,7 +59,6 @@ class TriggerService {
     try {
       token = await authService.getValidToken();
     } catch (error) {
-      console.warn('⚠️ Trigger request missing valid token:', error);
       token = authService.getToken();
     }
     const response = await fetch(`${this.baseURL}${endpoint}`, {
@@ -361,10 +360,8 @@ export const useTriggerRealtime = (workflowId: string) => {
     const interval = setInterval(async () => {
       try {
         // This would be replaced with real-time updates
-        console.log('Checking for trigger updates...');
         setConnected(true);
       } catch (error) {
-        console.error('Real-time connection error:', error);
         setConnected(false);
       }
     }, 30000); // Check every 30 seconds

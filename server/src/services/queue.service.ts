@@ -1,13 +1,11 @@
 import Queue from 'bull';
 import { config } from '../config/config';
-import { WorkflowEngine } from '../core/workflow-engine';
+import { workflowEngine } from '../engine/workflow-engine';
 
 export class QueueService {
   private workflowQueue!: Queue.Queue;
-  private workflowEngine: WorkflowEngine;
 
   constructor() {
-    this.workflowEngine = new WorkflowEngine();
     this.initializeQueues();
   }
 
@@ -30,7 +28,7 @@ export class QueueService {
   private setupQueueHandlers() {
     this.workflowQueue.process(async (job) => {
       const { workflowId, data } = job.data;
-      return await this.workflowEngine.executeWorkflow(workflowId, data);
+      return await workflowEngine.executeWorkflow(workflowId, data);
     });
 
     this.workflowQueue.on('completed', (job) => {

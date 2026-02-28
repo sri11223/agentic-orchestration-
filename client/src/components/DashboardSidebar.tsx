@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useWorkflowCreation } from '@/hooks/useWorkflowCreation';
+import { authService } from '@/services/auth.service';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -31,14 +32,19 @@ export const DashboardSidebar = ({ className }: DashboardSidebarProps) => {
   
   // Get user info from localStorage
   const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : { username: 'User', email: 'user@example.com' };
+  let user = { username: 'User', email: 'user@example.com' };
+  try {
+    if (userStr) user = JSON.parse(userStr);
+  } catch (e) {
+    // Error handled silently
+  }
   
-  const handleLogout = () => {
-    // Clear auth tokens
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (error) {
+      // Error handled silently
+    }
     // Navigate to login
     navigate('/login');
   };

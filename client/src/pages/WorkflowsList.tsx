@@ -5,25 +5,35 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Plus, Play, Copy, Trash2, Edit, Loader2 } from 'lucide-react';
+import { Plus, Copy, Trash2, Edit, Loader2 } from 'lucide-react';
 import { demoWorkflow } from '@/data/demoWorkflow';
 import { WorkflowPreview } from '@/components/workflow/WorkflowPreview';
 import { workflowService, WorkflowsResponse } from '@/services/workflow.service';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const WorkflowsList = () => {
   const { workflows, setCurrentWorkflow, createNewWorkflow, deleteWorkflow } = useWorkflowStore();
   const navigate = useNavigate();
   const [workflowsData, setWorkflowsData] = useState<WorkflowsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Fetch workflows from backend
   const fetchWorkflows = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('🔄 Fetching workflows from backend...');
       const data = await workflowService.getWorkflows({ limit: 100 });
       setWorkflowsData(data);
-      console.log('✅ Workflows fetched from backend:', data);
       
       // Also update the store with backend data
       if (data.workflows.length > 0) {
@@ -49,9 +59,7 @@ const WorkflowsList = () => {
         useWorkflowStore.setState({ workflows: storeWorkflows });
       }
     } catch (error) {
-      console.error('❌ Failed to fetch workflows from backend:', error);
       // Use store workflows as fallback
-      console.log('🔄 Using store workflows as fallback:', workflows);
       if (workflows.length === 0) {
         useWorkflowStore.setState({ workflows: [demoWorkflow] });
       }
@@ -87,8 +95,21 @@ const WorkflowsList = () => {
   };
   
   const handleDeleteWorkflow = (id: string) => {
-    if (confirm('Are you sure you want to delete this workflow?')) {
-      deleteWorkflow(id);
+    setPendingDeleteId(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    try {
+      await workflowService.deleteWorkflow(pendingDeleteId);
+      deleteWorkflow(pendingDeleteId);
+      fetchWorkflows();
+    } catch (error) {
+      deleteWorkflow(pendingDeleteId);
+    } finally {
+      setDeleteDialogOpen(false);
+      setPendingDeleteId(null);
     }
   };
   
@@ -107,7 +128,10 @@ const WorkflowsList = () => {
   
   // Get user info for welcome message
   const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : { username: 'User' };
+  let user = { username: 'User' };
+  if (userStr) {
+    try { user = JSON.parse(userStr); } catch { /* use default */ }
+  }
 
   return (
     <DashboardLayout
@@ -151,7 +175,6 @@ const WorkflowsList = () => {
                 key={workflow.id}
                 className="group hover:border-primary/50 transition-all cursor-pointer"
                 onClick={() => {
-                  console.log('🔗 Navigating to workflow:', workflow.id);
                   navigate(`/workflow/${workflow.id}`);
                 }}
               >
@@ -203,9 +226,21 @@ const WorkflowsList = () => {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          // Duplicate logic
+                          try {
+                            const source = await workflowService.getWorkflow(workflow.id || '');
+                            await workflowService.createWorkflow({
+                              name: `${source.name} (Copy)`,
+                              description: source.description,
+                              nodes: source.nodes,
+                              edges: source.edges,
+                              status: 'draft',
+                            });
+                            fetchWorkflows();
+                          } catch {
+                            // Duplicate failed silently
+                          }
                         }}
                       >
                         <Copy className="w-3 h-3 mr-1" />
@@ -230,6 +265,23 @@ const WorkflowsList = () => {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Workflow</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this workflow? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };

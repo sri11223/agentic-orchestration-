@@ -1,12 +1,26 @@
 import { Router } from 'express';
 import { AIService } from '../services/ai.service';
 import { AIWorkflowTemplates } from '../services/ai-workflow-templates.service';
+import { authenticate } from '../middleware/auth.middleware';
+import mongoose from 'mongoose';
 
 const router = Router();
+
+// All dashboard routes require authentication
+router.use(authenticate);
 
 // Initialize services
 const aiService = new AIService();
 const workflowTemplates = new AIWorkflowTemplates();
+
+// Helper to safely get model
+const getModel = (name: string) => {
+  try {
+    return mongoose.model(name);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Dashboard Overview Endpoint
@@ -14,6 +28,48 @@ const workflowTemplates = new AIWorkflowTemplates();
  */
 router.get('/overview', async (req, res) => {
   try {
+    const userId = (req as any).user?.id;
+    
+    // Fetch real data from database
+    const WorkflowModel = getModel('Workflow');
+    const ExecutionModel = getModel('ExecutionHistory');
+    
+    let workflowCount = 0;
+    let activeWorkflows = 0;
+    let executionStats = { total: 0, successful: 0, failed: 0 };
+    
+    if (WorkflowModel) {
+      workflowCount = await WorkflowModel.countDocuments(
+        userId ? { 'permissions.owners': userId } : {}
+      );
+      activeWorkflows = await WorkflowModel.countDocuments(
+        userId ? { 'permissions.owners': userId, status: 'active' } : { status: 'active' }
+      );
+    }
+    
+    if (ExecutionModel) {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const [totalExecs, todayExecs, weekExecs, failedExecs] = await Promise.all([
+        ExecutionModel.countDocuments({}),
+        ExecutionModel.countDocuments({ createdAt: { $gte: todayStart } }),
+        ExecutionModel.countDocuments({ createdAt: { $gte: weekStart } }),
+        ExecutionModel.countDocuments({ status: 'failed' }),
+      ]);
+      
+      executionStats = {
+        total: totalExecs,
+        successful: totalExecs - failedExecs,
+        failed: failedExecs,
+      };
+    }
+    
+    const successRate = executionStats.total > 0 
+      ? ((executionStats.successful / executionStats.total) * 100).toFixed(1) 
+      : '0';
+
     const overview = {
       timestamp: new Date().toISOString(),
       system: {
@@ -27,78 +83,37 @@ router.get('/overview', async (req, res) => {
           total: 6,
           active: 6,
           status: [
-            {
-              name: 'Gemini 2.5 Flash',
-              provider: 'google',
-              status: 'active',
-              model: 'gemini-2.0-flash-exp',
-              capabilities: ['content_generation', 'text_analysis', 'data_extraction'],
-              quota: { used: 45, limit: 1500, resetTime: '24h' }
-            },
-            {
-              name: 'Groq Llama 3.1',
-              provider: 'groq',
-              status: 'active',
-              model: 'llama-3.1-8b-instant',
-              capabilities: ['quick_decision', 'real_time_chat', 'simple_classification'],
-              quota: { used: 234, limit: 10000, resetTime: '24h' }
-            },
-            {
-              name: 'HuggingFace Models',
-              provider: 'huggingface',
-              status: 'active',
-              model: 'multiple',
-              capabilities: ['sentiment_analysis', 'summarization', 'question_answering'],
-              quota: { used: 67, limit: 1000, resetTime: '24h' }
-            },
-            {
-              name: 'GLM-4.5-Air',
-              provider: 'openrouter',
-              status: 'active',
-              model: 'z-ai/glm-4.5-air:free',
-              capabilities: ['math_reasoning', 'multilingual_tasks'],
-              quota: { used: 12, limit: 200, resetTime: '24h' }
-            },
-            {
-              name: 'Kimi Dev 72B',
-              provider: 'openrouter',
-              status: 'active',
-              model: 'moonshotai/kimi-dev-72b:free',
-              capabilities: ['long_context', 'chinese_tasks'],
-              quota: { used: 8, limit: 200, resetTime: '24h' }
-            },
-            {
-              name: 'Qwen 2.5 72B',
-              provider: 'openrouter',
-              status: 'active',
-              model: 'qwen/qwen-2.5-72b-instruct',
-              capabilities: ['code_generation', 'multilingual_tasks'],
-              quota: { used: 15, limit: 200, resetTime: '24h' }
-            }
+            { name: 'Gemini 2.5 Flash', provider: 'google', status: 'active', model: 'gemini-2.0-flash-exp' },
+            { name: 'Groq Llama 3.1', provider: 'groq', status: 'active', model: 'llama-3.1-8b-instant' },
+            { name: 'HuggingFace Models', provider: 'huggingface', status: 'active', model: 'multiple' },
+            { name: 'GLM-4.5-Air', provider: 'openrouter', status: 'active', model: 'z-ai/glm-4.5-air:free' },
+            { name: 'Kimi Dev 72B', provider: 'openrouter', status: 'active', model: 'moonshotai/kimi-dev-72b:free' },
+            { name: 'Qwen 2.5 72B', provider: 'openrouter', status: 'active', model: 'qwen/qwen-2.5-72b-instruct' },
           ]
         },
         routing: {
           smartRouting: true,
           fallbackEnabled: true,
           taskTypes: 14,
-          totalRequests: 381,
-          successRate: 98.7
         }
       },
       workflows: {
+        total: workflowCount,
+        active: activeWorkflows,
         templates: workflowTemplates.getTemplateSummary(),
         executions: {
-          today: 23,
-          thisWeek: 156,
-          thisMonth: 678,
-          successRate: 97.2
+          total: executionStats.total,
+          successful: executionStats.successful,
+          failed: executionStats.failed,
+          successRate: parseFloat(successRate),
         }
       },
       performance: {
-        averageResponseTime: '2.3s',
-        p95ResponseTime: '4.1s',
-        errorRate: '1.3%',
-        activeConnections: 12
+        memory: {
+          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        },
+        uptime: Math.round(process.uptime())
       }
     };
 

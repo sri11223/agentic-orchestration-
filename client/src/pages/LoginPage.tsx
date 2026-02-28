@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Eye, 
   EyeOff, 
@@ -29,6 +29,11 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const { toast } = useToast();
+
+  const handleSocialLogin = (provider: string) => {
+    toast({ title: 'Coming soon', description: `${provider} login will be available in a future update.` });
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +113,7 @@ const LoginPage = () => {
             <Button 
               variant="outline" 
               className="w-full h-12 text-gray-700 border-gray-300 hover:bg-gray-50"
+              onClick={() => handleSocialLogin('Google')}
             >
               <Chrome className="w-5 h-5 mr-3" />
               Continue with Google
@@ -115,6 +121,7 @@ const LoginPage = () => {
             <Button 
               variant="outline" 
               className="w-full h-12 text-gray-700 border-gray-300 hover:bg-gray-50"
+              onClick={() => handleSocialLogin('GitHub')}
             >
               <Github className="w-5 h-5 mr-3" />
               Continue with GitHub
@@ -189,6 +196,7 @@ const LoginPage = () => {
               <button
                 type="button"
                 className="text-blue-600 hover:text-blue-700 font-medium"
+                onClick={() => toast({ title: 'Password Reset', description: 'Password reset will be available in a future update.' })}
               >
                 Forgot password?
               </button>
@@ -208,6 +216,13 @@ const LoginPage = () => {
                 "Sign In"
               )}
             </Button>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
           </motion.form>
 
           {/* Footer */}
@@ -255,7 +270,7 @@ const LoginPage = () => {
           <div className="mb-8">
             <Badge className="mb-6 bg-white/20 text-white border-0">
               <Sparkles className="w-4 h-4 mr-2" />
-              Trusted by 50,000+ teams
+              Trusted by teams worldwide
             </Badge>
             
             <h2 className="text-4xl font-bold mb-6">

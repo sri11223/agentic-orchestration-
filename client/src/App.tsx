@@ -14,6 +14,9 @@ import OverviewDashboard from "./pages/OverviewDashboard";
 import WorkflowsList from "./pages/WorkflowsList";
 import WorkflowBuilder from "./pages/WorkflowBuilder";
 import NotFound from "./pages/NotFound";
+import CredentialsPage from "./pages/CredentialsPage";
+import ExecutionsPage from "./pages/ExecutionsPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -57,12 +60,12 @@ const App = () => (
           } />
           <Route path="/credentials" element={
             <ProtectedRoute>
-              <WorkflowsList />
+              <CredentialsPage />
             </ProtectedRoute>
           } />
           <Route path="/executions" element={
             <ProtectedRoute>
-              <WorkflowsList />
+              <ExecutionsPage />
             </ProtectedRoute>
           } />
           <Route path="/data-tables" element={
@@ -72,7 +75,7 @@ const App = () => (
           } />
           <Route path="/settings" element={
             <ProtectedRoute>
-              <WorkflowsList />
+              <SettingsPage />
             </ProtectedRoute>
           } />
           <Route path="/workflow/new" element={

@@ -14,7 +14,6 @@ import {
   Play, 
   Users, 
   Zap, 
-  Clock, 
   TrendingUp, 
   CheckCircle, 
   XCircle,
@@ -36,7 +35,10 @@ const OverviewDashboard = () => {
   
   // Get user info for welcome message
   const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : { username: 'User' };
+  let user = { username: 'User' };
+  if (userStr) {
+    try { user = JSON.parse(userStr); } catch { /* use default */ }
+  }
 
   // Fetch workflows data
   const fetchWorkflows = useCallback(async () => {
@@ -44,11 +46,8 @@ const OverviewDashboard = () => {
       setLoading(true);
       const data = await workflowService.getWorkflows({ limit: 100 });
       setWorkflowsData(data);
-      console.log('📊 Dashboard metrics updated:', data);
     } catch (error) {
-      console.error('Failed to fetch workflows from backend:', error);
       // Use store workflows as fallback
-      console.log('🔄 Using store workflows as fallback:', workflows);
       setWorkflowsData({
         workflows: workflows.map(w => ({
           id: w.id,
@@ -84,7 +83,6 @@ const OverviewDashboard = () => {
   useEffect(() => {
     // Initialize with demo workflow if store is empty
     if (workflows.length === 0) {
-      console.log('🔄 Initializing store with demo workflow');
       useWorkflowStore.setState({ workflows: [demoWorkflow] });
     }
     fetchWorkflows();
@@ -97,12 +95,6 @@ const OverviewDashboard = () => {
   const activeWorkflows = workflowsData?.workflows?.filter(w => w.status === 'active').length || 0;
   const draftWorkflows = workflowsData?.workflows?.filter(w => w.status === 'draft').length || 0;
   
-  console.log('📊 Metrics calculation:', {
-    totalWorkflows,
-    activeWorkflows,
-    draftWorkflows,
-    workflowsData: workflowsData?.pagination
-  });
   const metrics = [
     {
       title: 'Total workflows',
@@ -283,7 +275,6 @@ const OverviewDashboard = () => {
                       key={workflow.id}
                       className="group hover:border-primary/50 transition-all cursor-pointer"
                       onClick={() => {
-                        console.log('🔗 Navigating to workflow:', workflow.id);
                         navigate(`/workflow/${workflow.id}`);
                       }}
                     >
@@ -337,9 +328,9 @@ const OverviewDashboard = () => {
             <p className="text-muted-foreground mb-8">
               Add your AI provider credentials to enable workflow automation
             </p>
-            <Button className="bg-[#ff6b6b] hover:bg-[#ff5252] text-white">
+            <Button className="bg-[#ff6b6b] hover:bg-[#ff5252] text-white" onClick={() => navigate('/credentials')}>
               <Plus className="w-4 h-4 mr-2" />
-              Add Credential
+              Manage Credentials
             </Button>
           </div>
         )}
@@ -353,9 +344,9 @@ const OverviewDashboard = () => {
             <p className="text-muted-foreground mb-8">
               Monitor and review your workflow executions
             </p>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => navigate('/executions')}>
               <Play className="w-4 h-4 mr-2" />
-              Run Test Workflow
+              View Executions
             </Button>
           </div>
         )}
@@ -370,9 +361,9 @@ const OverviewDashboard = () => {
             <p className="text-muted-foreground mb-8">
               Store and manage data for your workflows
             </p>
-            <Button variant="outline">
+            <Button variant="outline" disabled>
               <Database className="w-4 h-4 mr-2" />
-              Create Table
+              Coming Soon
             </Button>
           </div>
         )}

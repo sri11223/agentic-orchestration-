@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
+import { config } from '../config/config';
 import { EventBus } from '../engine/event-bus';
 import { workflowEngine } from '../engine/workflow-engine';
 import { URL } from 'url';
@@ -119,7 +120,7 @@ export class WebSocketService {
         throw new Error('Authentication token required');
       }
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET || config.jwt.accessSecret) as any;
       return {
         id: decoded.id,
         email: decoded.email,

@@ -4,14 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { X, TestTube, Save, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AINodeConfig } from './AINodeConfig';
 import { authService } from '@/services/auth.service';
 import { useTriggers, useTrigger } from '@/hooks/useTriggers';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { API_URL } from '@/config/api';
 
@@ -52,15 +51,12 @@ const NodeConfigPanel = () => {
   }, [selectedNode?.id]); // Only re-sync when node ID changes, not on every update
   
   // Debounced update function to prevent too many rapid updates
+  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const debouncedUpdateConfig = (key: string, value: any) => {
-    // Clear any existing timeout for this key
-    const timeoutKey = `timeout_${key}`;
-    if ((window as any)[timeoutKey]) {
-      clearTimeout((window as any)[timeoutKey]);
+    if (debounceTimers.current[key]) {
+      clearTimeout(debounceTimers.current[key]);
     }
-    
-    // Set a new timeout to update after 150ms
-    (window as any)[timeoutKey] = setTimeout(() => {
+    debounceTimers.current[key] = setTimeout(() => {
       updateConfig(key, value);
     }, 150);
   };
@@ -100,13 +96,6 @@ const NodeConfigPanel = () => {
   const updateConfig = (key: string, value: any) => {
     if (!selectedNode) return;
     
-    console.log('🔧 UpdateConfig called:', { 
-      nodeId: selectedNode.id,
-      key, 
-      value, 
-      currentConfig: selectedNode.data.config
-    });
-    
     // Ensure we have a config object
     const currentConfig = selectedNode.data.config || {};
     const newConfig = {
@@ -117,8 +106,6 @@ const NodeConfigPanel = () => {
     updateNodeData(selectedNode.id, {
       config: newConfig,
     });
-    
-    console.log('✅ UpdateConfig completed for', key, 'new value:', value);
   };
   
   const updateLabel = (label: string) => {
@@ -130,17 +117,6 @@ const NodeConfigPanel = () => {
     if (!isTriggerNode) return;
     
     setSaving(true);
-    
-    // Ensure all local state is saved to node config before saving to backend
-    console.log('💾 Pre-save local state check:', {
-      nodeType: selectedNode.data.config?.nodeType,
-      localEmailAddress,
-      localSubjectFilter,
-      localSenderFilter,
-      localFrequency,
-      localMarkAsRead,
-      currentNodeConfig: selectedNode.data.config
-    });
     
     if (selectedNode.data.config?.nodeType === 'manual-trigger') {
       updateConfig('buttonText', localButtonText);
@@ -198,8 +174,6 @@ const NodeConfigPanel = () => {
         };
       }
       
-      console.log('💾 Built config from local state:', finalConfig);
-      
       const triggerConfig = {
         type: selectedNode.data.config?.nodeType as any,
         workflowId: currentWorkflowId,
@@ -207,8 +181,6 @@ const NodeConfigPanel = () => {
         enabled: true,
         config: finalConfig
       };
-      
-      console.log('💾 Complete trigger config:', triggerConfig);
 
       if (selectedNode.data.triggerId) {
         // Update existing trigger
@@ -344,20 +316,12 @@ const NodeConfigPanel = () => {
           nodeId={selectedNode.id}
           initialData={selectedNode.data.config}
           onSave={(aiConfig) => {
-            console.log('💾 NodeConfigPanel - Received AI config to save:', {
-              nodeId: selectedNode.id,
-              aiConfig,
-              currentConfig: selectedNode.data.config
-            });
-            
             updateNodeData(selectedNode.id, {
               config: {
                 ...selectedNode.data.config,
                 ...aiConfig
               }
             });
-            
-            console.log('✅ NodeConfigPanel - updateNodeData called');
           }}
           onTest={handleAITest}
         />
@@ -373,7 +337,6 @@ const NodeConfigPanel = () => {
               <Input
                 value={localEmailAddress}
                 onChange={(e) => {
-                  console.log('📧 Email address input changed:', e.target.value);
                   setLocalEmailAddress(e.target.value);
                   debouncedUpdateConfig('emailAddress', e.target.value);
                 }}
@@ -387,7 +350,6 @@ const NodeConfigPanel = () => {
               <Input
                 value={localSubjectFilter}
                 onChange={(e) => {
-                  console.log('📧 Subject filter input changed:', e.target.value);
                   setLocalSubjectFilter(e.target.value);
                   debouncedUpdateConfig('subjectFilter', e.target.value);
                 }}
@@ -400,7 +362,6 @@ const NodeConfigPanel = () => {
               <Input
                 value={localSenderFilter}
                 onChange={(e) => {
-                  console.log('📧 Sender filter input changed:', e.target.value);
                   setLocalSenderFilter(e.target.value);
                   debouncedUpdateConfig('senderFilter', e.target.value);
                 }}
@@ -414,7 +375,6 @@ const NodeConfigPanel = () => {
               <Select
                 value={localFrequency}
                 onValueChange={(value) => {
-                  console.log('📧 Frequency select changed:', value);
                   setLocalFrequency(value);
                   updateConfig('frequency', value);
                 }}
@@ -437,7 +397,6 @@ const NodeConfigPanel = () => {
                 id="markAsRead"
                 checked={localMarkAsRead}
                 onCheckedChange={(checked) => {
-                  console.log('Email markAsRead checkbox changed:', checked);
                   setLocalMarkAsRead(!!checked);
                   updateConfig('markAsRead', !!checked);
                 }}
@@ -458,7 +417,7 @@ const NodeConfigPanel = () => {
                 This is your unique webhook endpoint
               </div>
               <Input
-                value={`https://api.yourplatform.com/webhook/${selectedNode.id}`}
+                value={`${API_URL}/webhooks/${selectedNode.id}`}
                 readOnly
                 className="bg-muted"
               />
@@ -466,7 +425,7 @@ const NodeConfigPanel = () => {
                 variant="outline"
                 size="sm"
                 className="mt-2"
-                onClick={() => navigator.clipboard.writeText(`https://api.yourplatform.com/webhook/${selectedNode.id}`)}
+                onClick={() => navigator.clipboard.writeText(`${API_URL}/webhooks/${selectedNode.id}`)}
               >
                 Copy URL
               </Button>
@@ -685,7 +644,6 @@ const NodeConfigPanel = () => {
                 id="enabled"
                 checked={localScheduleEnabled}
                 onCheckedChange={(checked) => {
-                  console.log('Schedule enabled checkbox changed:', checked);
                   setLocalScheduleEnabled(!!checked);
                   updateConfig('enabled', !!checked);
                 }}
@@ -715,7 +673,6 @@ const NodeConfigPanel = () => {
               <Input
                 value={localButtonText}
                 onChange={(e) => {
-                  console.log('🔧 Button text input changed:', e.target.value);
                   setLocalButtonText(e.target.value);
                   debouncedUpdateConfig('buttonText', e.target.value);
                 }}
@@ -728,11 +685,6 @@ const NodeConfigPanel = () => {
               <Textarea
                 value={localDescription}
                 onChange={(e) => {
-                  console.log('📝 Description textarea changed:', {
-                    newValue: e.target.value,
-                    currentValue: localDescription,
-                    nodeId: selectedNode.id
-                  });
                   setLocalDescription(e.target.value);
                   debouncedUpdateConfig('description', e.target.value);
                 }}
@@ -747,7 +699,6 @@ const NodeConfigPanel = () => {
                 id="confirmBeforeRun"
                 checked={localConfirmBeforeRun}
                 onCheckedChange={(checked) => {
-                  console.log('Confirm before run checkbox changed:', checked);
                   setLocalConfirmBeforeRun(!!checked);
                   updateConfig('confirmBeforeRun', !!checked);
                 }}
@@ -935,7 +886,6 @@ const NodeConfigPanel = () => {
           <Input
             value={localNodeName}
             onChange={(e) => {
-              console.log('🏷️ Node name changed:', e.target.value);
               setLocalNodeName(e.target.value);
               // Update label immediately since it's not in config
               updateLabel(e.target.value);

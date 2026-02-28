@@ -40,6 +40,17 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
   const [loading, setLoading] = useState(false);
   const [showExecutionDetails, setShowExecutionDetails] = useState(false);
   const [selectedOutput, setSelectedOutput] = useState<{ nodeId: string; nodeName?: string; output: any } | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
+  }, []);
 
   const canExecute = currentWorkflow && currentWorkflow.nodes.length > 0;
 
@@ -83,6 +94,10 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
       });
 
       // Subscribe to execution updates
+      // Clean up any previous subscription
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
       const unsubscribe = executionService.subscribeToExecution(result.executionId, {
         onProgress: (status) => {
           setExecution(status);
@@ -99,8 +114,6 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
               return node;
             }));
           }
-
-          console.log('🔄 Execution progress:', status);
         },
         onEvent: (event) => {
           setEvents(prev => [...prev, event]);
@@ -122,33 +135,33 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
               executionTime: status.endTime ? 
                 new Date(status.endTime).getTime() - new Date(status.startTime).getTime() : 1000,
               output: status.result?.aiResponse || status.result?.output || `Successfully executed ${node.data?.label || node.type}`,
-              aiProvider: status.result?.provider || 'gemini',
-              tokensUsed: status.result?.tokensUsed || 100,
-              cost: status.result?.cost || 0.001,
-              confidence: status.result?.confidence || 0.9
+              aiProvider: status.result?.provider || undefined,
+              tokensUsed: status.result?.tokensUsed || undefined,
+              cost: status.result?.cost || undefined,
+              confidence: status.result?.confidence || undefined
             }));
             setNodeExecutions(completedNodes);
           }
 
           toast({
             title: "Workflow completed!",
-            description: `Successfully executed all nodes in ${status.endTime ? ((new Date(status.endTime).getTime() - new Date(status.startTime).getTime()) / 1000).toFixed(1) : '8.0'}s`,
+            description: `Successfully executed all nodes in ${status.endTime ? ((new Date(status.endTime).getTime() - new Date(status.startTime).getTime()) / 1000).toFixed(1) : '-'}s`,
           });
-
-          console.log('✅ Execution completed:', status);
         },
         onError: (error) => {
           setIsExecuting(false);
-          console.error('❌ Execution failed:', error);
         }
       });
 
-      // Cleanup subscription after component unmount or execution end
-      return unsubscribe;
+      // Store the unsubscribe ref for cleanup
+      unsubscribeRef.current = unsubscribe;
       
-    } catch (error) {
-      console.error('Failed to start execution:', error);
-      alert('Failed to start workflow execution: ' + error.message);
+    } catch (error: any) {
+      toast({
+        title: "Execution failed",
+        description: error?.message || 'Failed to start workflow execution',
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -159,8 +172,8 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
     
     try {
       await executionService.pauseExecution(execution.executionId);
-    } catch (error) {
-      console.error('Failed to pause execution:', error);
+    } catch {
+      // Pause failed
     }
   };
 
@@ -170,8 +183,8 @@ export function ExecutionPanel({ workflowId, className }: ExecutionPanelProps) {
     try {
       await executionService.cancelExecution(execution.executionId);
       setIsExecuting(false);
-    } catch (error) {
-      console.error('Failed to cancel execution:', error);
+    } catch {
+      // Cancel failed
     }
   };
 

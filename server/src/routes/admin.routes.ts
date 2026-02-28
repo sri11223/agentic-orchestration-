@@ -1,8 +1,13 @@
 import express from 'express';
 import { securityOptimizationService } from '../services/security-optimization.service';
 import { performanceMonitor } from '../services/performance-monitor.service';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = express.Router();
+
+// All admin routes require authentication and admin role
+router.use(authenticate);
+router.use(authorize('admin'));
 
 /**
  * @route GET /api/admin/security-config

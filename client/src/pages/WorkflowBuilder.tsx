@@ -126,7 +126,6 @@ const WorkflowBuilderContent = () => {
         // Always try to load from backend first for latest data
         try {
           setLoading(true);
-          console.log('🌐 Loading workflow from backend:', id);
           const workflow = await workflowService.getWorkflow(id);
           
           if (!workflow) {
@@ -138,37 +137,20 @@ const WorkflowBuilderContent = () => {
             const executionHistory = await executionService.getExecutionHistory(workflow.id || id, 1, 1);
             executionCount = executionHistory.pagination?.total ?? 0;
           } catch (historyError) {
-            console.warn('⚠️ Unable to load execution history:', historyError);
+            // Error handled silently
           }
 
           // Convert backend workflow to store format
-          console.log('🔄 Converting backend workflow to frontend format:', workflow);
-          
           const storeWorkflow = {
             ...workflow,
             id: workflow.id || id!, // Ensure ID is present
             // Convert backend nodes to frontend format
             nodes: workflow.nodes?.map(node => {
-              console.log('📍 Loading node:', {
-                id: node.id,
-                backendType: node.type,
-                frontendType: mapBackendToFrontendNodeType(node.type),
-                position: node.position,
-                title: node.data?.title
-              });
-              
               const frontendNodeType = mapBackendToFrontendNodeType(node.type);
               const nodeTypeConfig = nodeTypesList.find(nt => nt.type === frontendNodeType);
               
               // Ensure we have proper category mapping
               const category = nodeTypeConfig?.category || 'trigger';
-              
-              console.log('🎨 Node styling info:', {
-                nodeId: node.id,
-                frontendType: frontendNodeType,
-                category: category,
-                nodeTypeConfig: nodeTypeConfig?.label
-              });
               
               return {
                 id: node.id,
@@ -186,22 +168,12 @@ const WorkflowBuilderContent = () => {
                 }
               };
             }) || [],
-            edges: (() => {
-              console.log('🔗 Loading edges:', workflow.edges);
-              return workflow.edges || [];
-            })(),
+            edges: workflow.edges || [],
             lastModified: new Date(workflow.metadata?.updatedAt || Date.now()),
             executionCount
           };
           
           setCurrentWorkflow(storeWorkflow);
-          console.log('✅ Workflow loaded from backend successfully');
-          console.log('🎨 Final workflow nodes with categories:', storeWorkflow.nodes.map(n => ({
-            id: n.id,
-            type: n.type,
-            category: n.data.category,
-            label: n.data.label
-          })));
           
           // Update the store with the latest backend data
           const allWorkflows = useWorkflowStore.getState().workflows;
@@ -220,19 +192,14 @@ const WorkflowBuilderContent = () => {
           
           // Force ReactFlow to re-render by updating the instance
           setTimeout(() => {
-            console.log('🔄 Forcing ReactFlow refresh...');
             reactFlowInstance.fitView();
           }, 100);
           
         } catch (error) {
-          console.error('❌ Failed to load workflow from backend:', error);
-          
           // Fallback to local store only if backend fails
-          console.log('🔄 Falling back to local store...');
           const workflows = useWorkflowStore.getState().workflows;
           const localWorkflow = workflows.find(w => w.id === id);
           if (localWorkflow) {
-            console.log('📁 Loading workflow from local store as fallback:', id);
             
             // Ensure local workflow nodes have proper types and categories
             const normalizedWorkflow = {
@@ -247,13 +214,6 @@ const WorkflowBuilderContent = () => {
                 const frontendNodeType = node.data.config?.nodeType || mapBackendToFrontendNodeType(node.type);
                 const nodeTypeConfig = nodeTypesList.find(nt => nt.type === frontendNodeType);
                 const category = node.data.category || nodeTypeConfig?.category || 'trigger';
-                
-                console.log('🔧 Normalizing local node (fallback):', {
-                  nodeId: node.id,
-                  originalType: node.type,
-                  frontendType: frontendNodeType,
-                  category: category
-                });
                 
                 return {
                   ...node,
@@ -279,7 +239,6 @@ const WorkflowBuilderContent = () => {
             );
             useWorkflowStore.setState({ workflows: updatedWorkflows });
           } else {
-            console.error('❌ Workflow not found in local store either');
             toast({
               title: 'Workflow not found',
               description: 'We could not find that workflow. Redirecting to your workflows list.',
@@ -326,13 +285,11 @@ const WorkflowBuilderContent = () => {
   }, [onEdgesChange, debouncedSave]);
 
   const handleConnect = useCallback((connection: Connection) => {
-    console.log('🔗 Creating connection:', connection);
     onConnect(connection);
     debouncedSave(); // Auto-save after connecting nodes
   }, [onConnect, debouncedSave]);
 
   const handleDeleteEdge = useCallback((edgeId: string) => {
-    console.log('🗑️ Deleting edge:', edgeId);
     deleteEdge(edgeId);
     debouncedSave(); // Auto-save after deleting edge
   }, [deleteEdge, debouncedSave]);
@@ -348,21 +305,21 @@ const WorkflowBuilderContent = () => {
       
       if (!reactFlowWrapper.current) return;
       
-      const nodeTypeData = JSON.parse(
-        event.dataTransfer.getData('application/reactflow')
-      );
+      const rawData = event.dataTransfer.getData('application/reactflow');
+      if (!rawData) return;
+      
+      let nodeTypeData: any;
+      try {
+        nodeTypeData = JSON.parse(rawData);
+      } catch {
+        return;
+      }
       
       // Use ReactFlow's screenToFlowPosition for accurate coordinate conversion
       // This handles zoom, pan, and coordinate transformation automatically
       const position = reactFlowInstance.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
-      });
-      
-      console.log('🎯 Dropping node:', {
-        type: nodeTypeData.type,
-        clientPosition: { x: event.clientX, y: event.clientY },
-        flowPosition: position
       });
       
       const newNode: Node<NodeData> = {

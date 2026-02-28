@@ -17,11 +17,11 @@ import {
   ArrowLeft,
   CheckCircle,
   Sparkles,
-  Building,
   AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { authService, type RegisterRequest, type ApiError } from '@/services/auth.service';
+import { useToast } from '@/hooks/use-toast';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -36,6 +36,11 @@ const RegisterPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string>('');
+  const { toast } = useToast();
+
+  const handleSocialRegister = (provider: string) => {
+    toast({ title: 'Coming soon', description: `${provider} signup will be available in a future update.` });
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +101,7 @@ const RegisterPage = () => {
           <div className="mb-8">
             <Badge className="mb-6 bg-white/20 text-white border-0">
               <Sparkles className="w-4 h-4 mr-2" />
-              Join 50,000+ innovators
+              Join innovators worldwide
             </Badge>
             
             <h2 className="text-4xl font-bold mb-6">
@@ -187,6 +192,7 @@ const RegisterPage = () => {
             <Button 
               variant="outline" 
               className="w-full h-12 text-gray-700 border-gray-300 hover:bg-gray-50"
+              onClick={() => handleSocialRegister('Google')}
             >
               <Chrome className="w-5 h-5 mr-3" />
               Sign up with Google
@@ -194,6 +200,7 @@ const RegisterPage = () => {
             <Button 
               variant="outline" 
               className="w-full h-12 text-gray-700 border-gray-300 hover:bg-gray-50"
+              onClick={() => handleSocialRegister('GitHub')}
             >
               <Github className="w-5 h-5 mr-3" />
               Sign up with GitHub
@@ -345,11 +352,11 @@ const RegisterPage = () => {
               />
               <label htmlFor="terms" className="text-sm text-gray-600 dark:text-gray-300">
                 I agree to the{' '}
-                <button type="button" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                <button type="button" className="text-emerald-600 hover:text-emerald-700 font-medium" onClick={() => toast({ title: 'Terms of Service', description: 'Terms of Service page coming soon.' })}>
                   Terms of Service
                 </button>
                 {' '}and{' '}
-                <button type="button" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                <button type="button" className="text-emerald-600 hover:text-emerald-700 font-medium" onClick={() => toast({ title: 'Privacy Policy', description: 'Privacy Policy page coming soon.' })}>
                   Privacy Policy
                 </button>
               </label>

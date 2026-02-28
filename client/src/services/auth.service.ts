@@ -64,10 +64,6 @@ class AuthService {
   }
 
   async register(data: RegisterRequest): Promise<AuthResponse> {
-    console.log('🚀 Frontend: Starting registration request');
-    console.log('📡 URL:', `${API_URL}/auth/register`);
-    console.log('📦 Data:', data);
-    
     try {
       const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
@@ -77,18 +73,12 @@ class AuthService {
         body: JSON.stringify(data),
       });
 
-      console.log('📊 Response status:', response.status);
-      console.log('📊 Response ok:', response.ok);
-
       const result = await response.json();
-      console.log('📋 Response data:', result);
 
       if (!response.ok) {
-        console.error('❌ Registration failed:', result);
         throw result as ApiError;
       }
 
-      console.log('✅ Registration successful!');
       // Store tokens in localStorage
       localStorage.setItem('accessToken', result.tokens.accessToken);
       localStorage.setItem('refreshToken', result.tokens.refreshToken);
@@ -96,7 +86,6 @@ class AuthService {
 
       return result;
     } catch (error) {
-      console.error('🚨 Network error during registration:', error);
       throw error;
     }
   }
@@ -115,7 +104,7 @@ class AuthService {
         });
       }
     } catch (error) {
-      console.error('Logout error:', error);
+      // Logout error - clear tokens anyway
     } finally {
       // Clear stored data
       localStorage.removeItem('accessToken');
@@ -126,7 +115,12 @@ class AuthService {
 
   getUser(): any {
     const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    if (!user) return null;
+    try {
+      return JSON.parse(user);
+    } catch {
+      return null;
+    }
   }
 
   getToken(): string | null {
@@ -207,7 +201,6 @@ class AuthService {
 
     // If token is about to expire, refresh it
     if (this.isTokenExpired(currentToken)) {
-      console.log('🔄 Token expiring soon, refreshing...');
       return await this.refreshToken();
     }
 
