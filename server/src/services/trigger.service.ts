@@ -348,15 +348,27 @@ export class TriggerService {
   private async initializeEmailTrigger(trigger: ITriggerConfig): Promise<void> {
     if (!trigger.enabled) return;
 
-    const frequency = trigger.config.frequency * 60 * 1000; // Convert minutes to milliseconds
+    const triggerId = (trigger as any)._id!.toString();
+    
+    // Check if this trigger is already initialized
+    if (this.emailPollingIntervals.has(triggerId)) {
+      console.log(`⚠️ Email trigger ${triggerId} already initialized, skipping`);
+      return;
+    }
+
+    // Ensure frequency is a valid number and at least 1 minute
+    const frequencyMinutes = Math.max(parseInt(trigger.config.frequency) || 5, 1);
+    const frequency = frequencyMinutes * 60 * 1000; // Convert minutes to milliseconds
+    
+    console.log(`🔧 Setting up email trigger ${triggerId} with ${frequencyMinutes} minute frequency (${frequency}ms interval)`);
     
     const interval = setInterval(async () => {
       try {
         await this.checkEmailTrigger(trigger);
       } catch (error) {
-        console.error(`❌ Email trigger check failed for ${(trigger as any)._id}:`, error);
+        console.error(`❌ Email trigger check failed for ${triggerId}:`, error);
         await TriggerModel.findByIdAndUpdate(
-          (trigger as any)._id,
+          triggerId,
           {
             $push: {
               'metadata.errors': {
@@ -370,8 +382,8 @@ export class TriggerService {
       }
     }, frequency);
 
-    this.emailPollingIntervals.set((trigger as any)._id!.toString(), interval);
-    console.log(`✅ Email trigger initialized: ${(trigger as any)._id} with ${trigger.config.frequency}min frequency`);
+    this.emailPollingIntervals.set(triggerId, interval);
+    console.log(`✅ Email trigger initialized: ${triggerId} with ${frequencyMinutes}min frequency`);
   }
 
   private async initializeWebhookTrigger(trigger: ITriggerConfig): Promise<void> {

@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import { X, TestTube, Save, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AINodeConfig } from './AINodeConfig';
@@ -19,6 +20,50 @@ const NodeConfigPanel = () => {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  
+  // Local state for form fields to prevent re-render issues
+  const [localButtonText, setLocalButtonText] = useState('');
+  const [localDescription, setLocalDescription] = useState('');
+  const [localNodeName, setLocalNodeName] = useState('');
+  const [localConfirmBeforeRun, setLocalConfirmBeforeRun] = useState(false);
+  const [localMarkAsRead, setLocalMarkAsRead] = useState(false);
+  const [localScheduleEnabled, setLocalScheduleEnabled] = useState(true);
+  
+  // Email trigger local state
+  const [localEmailAddress, setLocalEmailAddress] = useState('');
+  const [localSubjectFilter, setLocalSubjectFilter] = useState('');
+  const [localSenderFilter, setLocalSenderFilter] = useState('');
+  const [localFrequency, setLocalFrequency] = useState('5');
+  
+  // Sync local state with selected node changes
+  useEffect(() => {
+    if (selectedNode) {
+      setLocalButtonText(selectedNode.data.config?.buttonText || '');
+      setLocalDescription(selectedNode.data.config?.description || '');
+      setLocalNodeName(selectedNode.data.label || '');
+      setLocalConfirmBeforeRun(selectedNode.data.config?.confirmBeforeRun || false);
+      setLocalMarkAsRead(selectedNode.data.config?.markAsRead || false);
+      setLocalScheduleEnabled(selectedNode.data.config?.enabled !== false);
+      setLocalEmailAddress(selectedNode.data.config?.emailAddress || '');
+      setLocalSubjectFilter(selectedNode.data.config?.subjectFilter || '');
+      setLocalSenderFilter(selectedNode.data.config?.senderFilter || '');
+      setLocalFrequency(selectedNode.data.config?.frequency || '5');
+    }
+  }, [selectedNode?.id]); // Only re-sync when node ID changes, not on every update
+  
+  // Debounced update function to prevent too many rapid updates
+  const debouncedUpdateConfig = (key: string, value: any) => {
+    // Clear any existing timeout for this key
+    const timeoutKey = `timeout_${key}`;
+    if ((window as any)[timeoutKey]) {
+      clearTimeout((window as any)[timeoutKey]);
+    }
+    
+    // Set a new timeout to update after 150ms
+    (window as any)[timeoutKey] = setTimeout(() => {
+      updateConfig(key, value);
+    }, 150);
+  };
   
   // Get current workflow ID from the workflow store or URL
   const currentWorkflowId = workflowId || 'current-workflow'; // You might need to adjust this based on your workflow store
@@ -53,13 +98,27 @@ const NodeConfigPanel = () => {
   const Icon = nodeConfig?.icon;
   
   const updateConfig = (key: string, value: any) => {
-    console.log('🔧 UpdateConfig called:', { key, value, currentConfig: selectedNode.data.config });
-    updateNodeData(selectedNode.id, {
-      config: {
-        ...selectedNode.data.config,
-        [key]: value,
-      },
+    if (!selectedNode) return;
+    
+    console.log('🔧 UpdateConfig called:', { 
+      nodeId: selectedNode.id,
+      key, 
+      value, 
+      currentConfig: selectedNode.data.config
     });
+    
+    // Ensure we have a config object
+    const currentConfig = selectedNode.data.config || {};
+    const newConfig = {
+      ...currentConfig,
+      [key]: value,
+    };
+    
+    updateNodeData(selectedNode.id, {
+      config: newConfig,
+    });
+    
+    console.log('✅ UpdateConfig completed for', key, 'new value:', value);
   };
   
   const updateLabel = (label: string) => {
@@ -71,14 +130,85 @@ const NodeConfigPanel = () => {
     if (!isTriggerNode) return;
     
     setSaving(true);
+    
+    // Ensure all local state is saved to node config before saving to backend
+    console.log('💾 Pre-save local state check:', {
+      nodeType: selectedNode.data.config?.nodeType,
+      localEmailAddress,
+      localSubjectFilter,
+      localSenderFilter,
+      localFrequency,
+      localMarkAsRead,
+      currentNodeConfig: selectedNode.data.config
+    });
+    
+    if (selectedNode.data.config?.nodeType === 'manual-trigger') {
+      updateConfig('buttonText', localButtonText);
+      updateConfig('description', localDescription);
+      updateConfig('confirmBeforeRun', localConfirmBeforeRun);
+    }
+    
+    if (selectedNode.data.config?.nodeType === 'email-trigger') {
+      updateConfig('emailAddress', localEmailAddress);
+      updateConfig('subjectFilter', localSubjectFilter);
+      updateConfig('senderFilter', localSenderFilter);
+      updateConfig('frequency', localFrequency);
+      updateConfig('markAsRead', localMarkAsRead);
+    }
+    
+    if (selectedNode.data.config?.nodeType === 'schedule-trigger') {
+      updateConfig('enabled', localScheduleEnabled);
+    }
+    
+    // Wait a moment for the state updates to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     try {
+      // Build config directly from local state instead of relying on node config
+      let finalConfig: any = {
+        nodeType: selectedNode.data.config?.nodeType,
+        ...selectedNode.data.config
+      };
+      
+      // Override with current local state for each trigger type
+      if (selectedNode.data.config?.nodeType === 'email-trigger') {
+        finalConfig = {
+          ...finalConfig,
+          emailAddress: localEmailAddress,
+          subjectFilter: localSubjectFilter,
+          senderFilter: localSenderFilter,
+          frequency: localFrequency,
+          markAsRead: localMarkAsRead
+        };
+      }
+      
+      if (selectedNode.data.config?.nodeType === 'manual-trigger') {
+        finalConfig = {
+          ...finalConfig,
+          buttonText: localButtonText,
+          description: localDescription,
+          confirmBeforeRun: localConfirmBeforeRun
+        };
+      }
+      
+      if (selectedNode.data.config?.nodeType === 'schedule-trigger') {
+        finalConfig = {
+          ...finalConfig,
+          enabled: localScheduleEnabled
+        };
+      }
+      
+      console.log('💾 Built config from local state:', finalConfig);
+      
       const triggerConfig = {
-        type: selectedNode.data.config.nodeType as any,
+        type: selectedNode.data.config?.nodeType as any,
         workflowId: currentWorkflowId,
         nodeId: selectedNode.id,
         enabled: true,
-        config: selectedNode.data.config
+        config: finalConfig
       };
+      
+      console.log('💾 Complete trigger config:', triggerConfig);
 
       if (selectedNode.data.triggerId) {
         // Update existing trigger
@@ -238,8 +368,12 @@ const NodeConfigPanel = () => {
             <div>
               <Label>Email Address</Label>
               <Input
-                value={selectedNode.data.config?.emailAddress || ''}
-                onChange={(e) => updateConfig('emailAddress', e.target.value)}
+                value={localEmailAddress}
+                onChange={(e) => {
+                  console.log('📧 Email address input changed:', e.target.value);
+                  setLocalEmailAddress(e.target.value);
+                  debouncedUpdateConfig('emailAddress', e.target.value);
+                }}
                 placeholder="trigger@yourdomain.com"
                 type="email"
               />
@@ -248,8 +382,12 @@ const NodeConfigPanel = () => {
             <div>
               <Label>Subject Filter (optional)</Label>
               <Input
-                value={selectedNode.data.config?.subjectFilter || ''}
-                onChange={(e) => updateConfig('subjectFilter', e.target.value)}
+                value={localSubjectFilter}
+                onChange={(e) => {
+                  console.log('📧 Subject filter input changed:', e.target.value);
+                  setLocalSubjectFilter(e.target.value);
+                  debouncedUpdateConfig('subjectFilter', e.target.value);
+                }}
                 placeholder="Contains this text"
               />
             </div>
@@ -257,8 +395,12 @@ const NodeConfigPanel = () => {
             <div>
               <Label>Sender Filter (optional)</Label>
               <Input
-                value={selectedNode.data.config?.senderFilter || ''}
-                onChange={(e) => updateConfig('senderFilter', e.target.value)}
+                value={localSenderFilter}
+                onChange={(e) => {
+                  console.log('📧 Sender filter input changed:', e.target.value);
+                  setLocalSenderFilter(e.target.value);
+                  debouncedUpdateConfig('senderFilter', e.target.value);
+                }}
                 placeholder="sender@domain.com"
                 type="email"
               />
@@ -267,8 +409,12 @@ const NodeConfigPanel = () => {
             <div>
               <Label>Check Frequency</Label>
               <Select
-                value={selectedNode.data.config?.frequency || '5'}
-                onValueChange={(value) => updateConfig('frequency', value)}
+                value={localFrequency}
+                onValueChange={(value) => {
+                  console.log('📧 Frequency select changed:', value);
+                  setLocalFrequency(value);
+                  updateConfig('frequency', value);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -284,15 +430,14 @@ const NodeConfigPanel = () => {
             </div>
             
             <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="markAsRead"
-                checked={selectedNode.data.config?.markAsRead || false}
-                onChange={(e) => {
-                  console.log('Email markAsRead checkbox changed:', e.target.checked);
-                  updateConfig('markAsRead', e.target.checked);
+                checked={localMarkAsRead}
+                onCheckedChange={(checked) => {
+                  console.log('Email markAsRead checkbox changed:', checked);
+                  setLocalMarkAsRead(!!checked);
+                  updateConfig('markAsRead', !!checked);
                 }}
-                className="h-4 w-4 rounded border border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <Label htmlFor="markAsRead" className="text-sm cursor-pointer">
                 Mark emails as read after processing
@@ -533,15 +678,14 @@ const NodeConfigPanel = () => {
             )}
             
             <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="enabled"
-                checked={selectedNode.data.config?.enabled !== false}
-                onChange={(e) => {
-                  console.log('Schedule enabled checkbox changed:', e.target.checked);
-                  updateConfig('enabled', e.target.checked);
+                checked={localScheduleEnabled}
+                onCheckedChange={(checked) => {
+                  console.log('Schedule enabled checkbox changed:', checked);
+                  setLocalScheduleEnabled(!!checked);
+                  updateConfig('enabled', !!checked);
                 }}
-                className="h-4 w-4 rounded border border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <Label htmlFor="enabled" className="text-sm cursor-pointer">
                 Schedule enabled
@@ -566,8 +710,12 @@ const NodeConfigPanel = () => {
             <div>
               <Label>Trigger Button Text</Label>
               <Input
-                value={selectedNode.data.config?.buttonText || 'Start Workflow'}
-                onChange={(e) => updateConfig('buttonText', e.target.value)}
+                value={localButtonText}
+                onChange={(e) => {
+                  console.log('🔧 Button text input changed:', e.target.value);
+                  setLocalButtonText(e.target.value);
+                  debouncedUpdateConfig('buttonText', e.target.value);
+                }}
                 placeholder="Start Workflow"
               />
             </div>
@@ -575,10 +723,15 @@ const NodeConfigPanel = () => {
             <div>
               <Label>Description</Label>
               <Textarea
-                value={selectedNode.data.config?.description || ''}
+                value={localDescription}
                 onChange={(e) => {
-                  console.log('Description changed:', e.target.value);
-                  updateConfig('description', e.target.value);
+                  console.log('📝 Description textarea changed:', {
+                    newValue: e.target.value,
+                    currentValue: localDescription,
+                    nodeId: selectedNode.id
+                  });
+                  setLocalDescription(e.target.value);
+                  debouncedUpdateConfig('description', e.target.value);
                 }}
                 placeholder="Describe when this workflow should be triggered manually"
                 rows={3}
@@ -587,15 +740,14 @@ const NodeConfigPanel = () => {
             </div>
             
             <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
+              <Checkbox
                 id="confirmBeforeRun"
-                checked={selectedNode.data.config?.confirmBeforeRun || false}
-                onChange={(e) => {
-                  console.log('Checkbox changed:', e.target.checked);
-                  updateConfig('confirmBeforeRun', e.target.checked);
+                checked={localConfirmBeforeRun}
+                onCheckedChange={(checked) => {
+                  console.log('Confirm before run checkbox changed:', checked);
+                  setLocalConfirmBeforeRun(!!checked);
+                  updateConfig('confirmBeforeRun', !!checked);
                 }}
-                className="h-4 w-4 rounded border border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <Label htmlFor="confirmBeforeRun" className="text-sm cursor-pointer">
                 Ask for confirmation before running
@@ -781,8 +933,13 @@ const NodeConfigPanel = () => {
         <div>
           <Label>Node Name</Label>
           <Input
-            value={selectedNode.data.label}
-            onChange={(e) => updateLabel(e.target.value)}
+            value={localNodeName}
+            onChange={(e) => {
+              console.log('🏷️ Node name changed:', e.target.value);
+              setLocalNodeName(e.target.value);
+              // Update label immediately since it's not in config
+              updateLabel(e.target.value);
+            }}
             placeholder="Enter node name"
           />
         </div>
